@@ -14,12 +14,12 @@ const OTHER_SHA = 'b'.repeat(40);
 const TAG = 'v26.10.01.001';
 const NOW = new Date('2026-09-30T17:00:00Z');
 const PAYLOADS = [
-  'agents-dashboard-darwin-arm64.zip',
+  'agents-dashboard-macos-arm64.zip',
   'agents-dashboard-windows-amd64.exe',
   'agents-dashboard-windows-amd64-installer.exe',
   'agents-dashboard-linux-amd64.tar.gz',
   'agents-dashboard-linux-arm64.tar.gz',
-  'agents-dashboard-server-darwin-arm64.tar.gz',
+  'agents-dashboard-server-macos-arm64.tar.gz',
   'agents-dashboard-server-windows-amd64.zip',
   'agents-dashboard-server-linux-amd64.tar.gz',
   'agents-dashboard-server-linux-arm64.tar.gz',

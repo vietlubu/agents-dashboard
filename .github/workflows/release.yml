@@ -157,8 +157,8 @@ jobs:
       - name: Verify macOS desktop bundle
         if: matrix.os == 'darwin'
         run: |
-          test -x bin/agents-dashboard.app/Contents/MacOS/agents-dashboard
-          codesign --verify --deep --strict bin/agents-dashboard.app
+          test -x "bin/Agents Dashboard.app/Contents/MacOS/agents-dashboard"
+          codesign --verify --deep --strict "bin/Agents Dashboard.app"
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           import { execFileSync } from 'node:child_process';
@@ -167,11 +167,11 @@ jobs:
           const { TARGET_ARCH, RELEASE_TAG } = process.env;
           const expectedCPU = 'arm64';
           assert.equal(TARGET_ARCH, expectedCPU, 'Unsupported macOS release architecture');
-          const executable = 'bin/agents-dashboard.app/Contents/MacOS/agents-dashboard';
+          const executable = 'bin/Agents Dashboard.app/Contents/MacOS/agents-dashboard';
           assert.equal(execFileSync('lipo', ['-archs', executable], { encoding: 'utf8' }).trim(), expectedCPU);
           const version = parseVersion(RELEASE_TAG);
           assert.equal(version.tag, RELEASE_TAG);
-          const plist = 'bin/agents-dashboard.app/Contents/Info.plist';
+          const plist = 'bin/Agents Dashboard.app/Contents/Info.plist';
           for (const [key, expected] of [['CFBundleShortVersionString', version.short], ['CFBundleVersion', version.bundle]]) {
             assert.equal(execFileSync('plutil', ['-extract', key, 'raw', '-o', '-', plist], { encoding: 'utf8' }).trim(), expected);
           }
@@ -213,7 +213,7 @@ jobs:
           import assert from 'node:assert/strict';
           import { execFileSync } from 'node:child_process';
           const { TARGET_OS: os, TARGET_ARCH: arch } = process.env;
-          const desktop = os === 'darwin' ? 'bin/agents-dashboard.app/Contents/MacOS/agents-dashboard' : `bin/agents-dashboard${os === 'windows' ? '.exe' : ''}`;
+          const desktop = os === 'darwin' ? 'bin/Agents Dashboard.app/Contents/MacOS/agents-dashboard' : `bin/Agents Dashboard${os === 'windows' ? '.exe' : ''}`;
           const server = `bin/agents-dashboard-server${os === 'windows' ? '.exe' : ''}`;
           for (const binary of [desktop, server]) {
             const info = execFileSync('go', ['version', '-m', binary], { encoding: 'utf8' });
@@ -239,18 +239,18 @@ jobs:
         run: |
           (
             cd bin
-            zip -qry "release/agents-dashboard-darwin-${TARGET_ARCH}.zip" agents-dashboard.app
+            zip -qry "release/agents-dashboard-macos-${TARGET_ARCH}.zip" "Agents Dashboard.app"
           )
-          tar -czf "bin/release/agents-dashboard-server-darwin-${TARGET_ARCH}.tar.gz" -C bin agents-dashboard-server
+          tar -czf "bin/release/agents-dashboard-server-macos-${TARGET_ARCH}.tar.gz" -C bin agents-dashboard-server
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           import { execFileSync } from 'node:child_process';
           const arch = process.env.TARGET_ARCH;
-          const desktop = `bin/release/agents-dashboard-darwin-${arch}.zip`;
+          const desktop = `bin/release/agents-dashboard-macos-${arch}.zip`;
           const entries = execFileSync('unzip', ['-Z1', desktop], { encoding: 'utf8' }).trim().split('\n');
-          assert.ok(entries.every((entry) => entry.startsWith('agents-dashboard.app/')), 'Desktop archive must contain only the app root');
-          assert.ok(entries.includes('agents-dashboard.app/Contents/MacOS/agents-dashboard'), 'Desktop archive is missing its executable');
-          const server = `bin/release/agents-dashboard-server-darwin-${arch}.tar.gz`;
+          assert.ok(entries.every((entry) => entry.startsWith('Agents Dashboard.app/')), 'Desktop archive must contain only the app root');
+          assert.ok(entries.includes('Agents Dashboard.app/Contents/MacOS/agents-dashboard'), 'Desktop archive is missing its executable');
+          const server = `bin/release/agents-dashboard-server-macos-${arch}.tar.gz`;
           assert.equal(execFileSync('tar', ['-tzf', server], { encoding: 'utf8' }).trim(), 'agents-dashboard-server');
           NODE
       - name: Verify Linux native binaries
@@ -261,7 +261,7 @@ jobs:
           import { openSync, readSync, closeSync, statSync, readFileSync } from 'node:fs';
           const machine = { amd64: 62, arm64: 183 }[process.env.TARGET_ARCH];
           assert.ok(machine, 'unsupported Linux target architecture');
-          for (const binary of ['bin/agents-dashboard', 'bin/agents-dashboard-server']) {
+          for (const binary of ['bin/Agents Dashboard', 'bin/agents-dashboard-server']) {
             const stat = statSync(binary);
             assert.ok(stat.isFile(), `${binary}: expected a regular file`);
             assert.ok(stat.mode & 0o100, `${binary}: owner execute bit is missing`);
@@ -279,14 +279,14 @@ jobs:
             assert.equal(header.readUInt16LE(18), machine, `${binary}: wrong native machine architecture`);
           }
           assert.ok(process.env.RELEASE_TAG, 'missing release tag');
-          assert.ok(readFileSync('bin/agents-dashboard').includes(Buffer.from(process.env.RELEASE_TAG)), 'desktop binary lacks the full release tag (supplementary byte check only)');
+          assert.ok(readFileSync('bin/Agents Dashboard').includes(Buffer.from(process.env.RELEASE_TAG)), 'desktop binary lacks the full release tag (supplementary byte check only)');
           NODE
       - name: Stage Linux portable archives
         if: matrix.os == 'linux'
         run: |
-          tar -czf "bin/release/agents-dashboard-linux-${TARGET_ARCH}.tar.gz" -C bin agents-dashboard
+          tar -czf "bin/release/agents-dashboard-linux-${TARGET_ARCH}.tar.gz" -C bin "Agents Dashboard"
           tar -czf "bin/release/agents-dashboard-server-linux-${TARGET_ARCH}.tar.gz" -C bin agents-dashboard-server
-          test "$(tar -tzf "bin/release/agents-dashboard-linux-${TARGET_ARCH}.tar.gz")" = agents-dashboard
+          test "$(tar -tzf "bin/release/agents-dashboard-linux-${TARGET_ARCH}.tar.gz")" = "Agents Dashboard"
           test "$(tar -tzf "bin/release/agents-dashboard-server-linux-${TARGET_ARCH}.tar.gz")" = agents-dashboard-server
       - name: Verify Windows binaries and version resources
         if: matrix.os == 'windows'
@@ -310,7 +310,7 @@ jobs:
               $reader.Dispose()
             }
           }
-          $desktop = 'bin/agents-dashboard.exe'
+          $desktop = 'bin/Agents Dashboard.exe'
           $server = 'bin/agents-dashboard-server.exe'
           $installer = 'bin/agents-dashboard-amd64-installer.exe'
           Assert-Amd64 $desktop
@@ -346,7 +346,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          Copy-Item -LiteralPath 'bin/agents-dashboard.exe' -Destination 'bin/release/agents-dashboard-windows-amd64.exe'
+          Copy-Item -LiteralPath 'bin/Agents Dashboard.exe' -Destination 'bin/release/agents-dashboard-windows-amd64.exe'
           Copy-Item -LiteralPath 'bin/agents-dashboard-amd64-installer.exe' -Destination 'bin/release/agents-dashboard-windows-amd64-installer.exe'
           Compress-Archive -LiteralPath 'bin/agents-dashboard-server.exe' -DestinationPath 'bin/release/agents-dashboard-server-windows-amd64.zip'
           Add-Type -AssemblyName System.IO.Compression.FileSystem

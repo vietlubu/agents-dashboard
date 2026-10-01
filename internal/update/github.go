@@ -18,7 +18,7 @@ import (
 func DesktopAsset(platform, arch string) (string, error) {
 	switch platform + "/" + arch {
 	case "darwin/arm64":
-		return "agents-dashboard-darwin-arm64.zip", nil
+		return "agents-dashboard-macos-arm64.zip", nil
 	case "windows/amd64":
 		return "agents-dashboard-windows-amd64.exe", nil
 	case "linux/amd64":

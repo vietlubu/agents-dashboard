@@ -2,6 +2,7 @@ version: '3'
 
 vars:
   APP_NAME: "agents-dashboard"
+  APP_DISPLAY_NAME: "Agents Dashboard"
   BIN_DIR: "bin"
   PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "pnpm"}}'
   VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'

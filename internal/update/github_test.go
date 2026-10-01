@@ -91,7 +91,7 @@ func TestGitHubProviderDesktopTargets(t *testing.T) {
 	for _, tc := range []struct {
 		platform, arch, name, server string
 	}{
-		{"darwin", "arm64", "agents-dashboard-darwin-arm64.zip", "agents-dashboard-server-darwin-arm64.tar.gz"},
+		{"darwin", "arm64", "agents-dashboard-macos-arm64.zip", "agents-dashboard-server-macos-arm64.tar.gz"},
 		{"windows", "amd64", "agents-dashboard-windows-amd64.exe", "agents-dashboard-server-windows-amd64.zip"},
 		{"linux", "amd64", "agents-dashboard-linux-amd64.tar.gz", "agents-dashboard-server-linux-amd64.tar.gz"},
 		{"linux", "arm64", "agents-dashboard-linux-arm64.tar.gz", "agents-dashboard-server-linux-arm64.tar.gz"},
@@ -153,6 +153,11 @@ func TestGitHubProviderRejectsUnsafeReleases(t *testing.T) {
 		{"unsupported platform", func(f *githubFixture, r *updater.CheckRequest) { r.Platform = "freebsd" }, true},
 		{"unsupported windows arm", func(f *githubFixture, r *updater.CheckRequest) { r.Platform, r.Arch = "windows", "arm64" }, true},
 		{"unsupported macOS Intel", func(f *githubFixture, r *updater.CheckRequest) { r.Platform, r.Arch = "darwin", "amd64" }, true},
+		{"legacy macOS asset name", func(f *githubFixture, r *updater.CheckRequest) {
+			r.Platform, r.Arch = "darwin", "arm64"
+			f.assets = []string{"agents-dashboard-darwin-arm64.zip", "SHA256SUMS"}
+			f.checksum = checksumLine("agents-dashboard-darwin-arm64.zip")
+		}, false},
 		{"missing payload", func(f *githubFixture, r *updater.CheckRequest) {
 			f.assets = []string{"agents-dashboard-server-linux-amd64.tar.gz", "SHA256SUMS"}
 		}, false},

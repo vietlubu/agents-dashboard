@@ -72,7 +72,7 @@ Taskfile tasks can be invoked as `task <name>` or `wails3 task <name>`.
 pnpm --dir frontend install
 
 task dev             # desktop app in watch mode (vite on 127.0.0.1:9245, hot reload)
-task build           # production desktop binary -> bin/agents-dashboard
+task build           # production desktop binary -> bin/Agents Dashboard[.exe]
 task run             # build and launch
 
 task build:server    # headless server binary -> bin/agents-dashboard-server
@@ -219,6 +219,11 @@ test suite; `vue-tsc` is its only automated check. Go tests use the stdlib `test
 with temp-dir fixtures. `internal/pricing/live_test.go` is the only network test and is
 skipped under `-short` unless `AGENTS_DASHBOARD_LIVE_PRICING` is set.
 
+The application icon was generated with `gpt-image-1.5` and resized to a
+512×512 transparent PNG (`build/appicon.png`, about 195 KiB). Run
+`wails3 task common:generate:icons` to regenerate macOS ICNS and Windows ICO;
+the browser uses a 64×64 derivative in `frontend/public/appicon.png`.
+
 ### GitHub Actions
 
 `.github/workflows/release.yml` runs release-script fixtures, the real frontend
@@ -257,14 +262,22 @@ Reruns reuse the tag reserved for their source commit; failed builds may leave g
 run their fixture checks with `node --test scripts/release.test.mjs`.
 Metadata is copied from `build/` templates rather than modifying them.
 
-Each release contains desktop and server payloads for darwin arm64,
+Each release contains desktop and server payloads for macOS arm64,
 windows amd64 and linux amd64/arm64, plus a Windows per-user installer:
 nine payloads and `SHA256SUMS`. macOS Intel builds are not published and do not
 support automatic updates. Basenames are stable: `agents-dashboard-<os>-<arch>` and
-`agents-dashboard-server-<os>-<arch>` (macOS desktop ZIP, Windows desktop EXE,
-Windows server ZIP, other payloads tar.gz). The installer is
-`agents-dashboard-windows-amd64-installer.exe`. Archives contain one root:
-`agents-dashboard.app`, `agents-dashboard`, or `agents-dashboard-server[.exe]`.
+`agents-dashboard-server-<os>-<arch>`, with `os` equal to `macos`, `windows` or
+`linux` (macOS desktop ZIP, Windows desktop EXE, Windows server ZIP, other payloads
+tar.gz). The macOS download is `agents-dashboard-macos-arm64.zip`; extract it and
+copy `Agents Dashboard.app` to a writable local folder. The Windows standalone
+download remains `agents-dashboard-windows-amd64.exe`; the per-user installer is
+`agents-dashboard-windows-amd64-installer.exe` and installs `Agents Dashboard.exe`.
+Archives contain one root: `Agents Dashboard.app`, `Agents Dashboard`, or
+`agents-dashboard-server[.exe]`. The macOS bundle's inner executable remains
+`agents-dashboard`.
+Existing macOS installations using the former `darwin` download name need a
+one-time manual installation of the newly named bundle; older updater builds
+look for the old asset name.
 No mobile, Docker or Linux package-manager artifacts are published.
 
 Publication verifies the complete asset manifest and hashes in a private draft

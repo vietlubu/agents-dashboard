@@ -11,9 +11,9 @@ import (
 
 func capabilityExecutable(t *testing.T, root string) string {
 	t.Helper()
-	executable := filepath.Join(root, "agents-dashboard")
+	executable := filepath.Join(root, "Agents Dashboard")
 	if runtime.GOOS == "darwin" {
-		executable = filepath.Join(root, "agents-dashboard.app", "Contents", "MacOS", "agents-dashboard")
+		executable = filepath.Join(root, "Agents Dashboard.app", "Contents", "MacOS", "agents-dashboard")
 	}
 	if runtime.GOOS == "windows" {
 		executable += ".exe"

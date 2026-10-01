@@ -155,7 +155,7 @@ func updatePayload(t *testing.T) []byte {
 	switch runtime.GOOS {
 	case "darwin":
 		archive := zip.NewWriter(&data)
-		header := &zip.FileHeader{Name: "agents-dashboard.app/Contents/MacOS/agents-dashboard"}
+		header := &zip.FileHeader{Name: "Agents Dashboard.app/Contents/MacOS/agents-dashboard"}
 		header.SetMode(0o755)
 		file, err := archive.CreateHeader(header)
 		if err != nil {
@@ -170,7 +170,7 @@ func updatePayload(t *testing.T) []byte {
 	case "linux":
 		compressed := gzip.NewWriter(&data)
 		archive := tar.NewWriter(compressed)
-		if err := archive.WriteHeader(&tar.Header{Name: "agents-dashboard", Mode: 0o755, Size: int64(len(payload))}); err != nil {
+		if err := archive.WriteHeader(&tar.Header{Name: "Agents Dashboard", Mode: 0o755, Size: int64(len(payload))}); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := archive.Write(payload); err != nil {
@@ -204,9 +204,9 @@ func newUpdateHarness(t *testing.T) *updateHarness {
 	version.Version = updateCurrent
 	t.Cleanup(func() { version.Version = oldVersion })
 	h := &updateHarness{fixture: newUpdateFixture(t), host: &updateHost{}, root: t.TempDir()}
-	h.target = filepath.Join(h.root, "installation", "agents-dashboard")
+	h.target = filepath.Join(h.root, "installation", "Agents Dashboard")
 	if runtime.GOOS == "darwin" {
-		h.target = filepath.Join(h.root, "installation", "agents-dashboard.app", "Contents", "MacOS", "agents-dashboard")
+		h.target = filepath.Join(h.root, "installation", "Agents Dashboard.app", "Contents", "MacOS", "agents-dashboard")
 	} else if runtime.GOOS == "windows" {
 		h.target += ".exe"
 	}

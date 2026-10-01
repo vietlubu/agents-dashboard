@@ -115,7 +115,7 @@ func TestMacBundleInstallCapability(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
 			executable := capabilityExecutable(t, root)
-			resources := filepath.Join(root, "agents-dashboard.app", "Contents", "Resources")
+			resources := filepath.Join(root, "Agents Dashboard.app", "Contents", "Resources")
 			if err := os.Mkdir(resources, 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -131,7 +131,7 @@ func TestMacBundleInstallCapability(t *testing.T) {
 			t.Fatal(err)
 		}
 		capabilityMode(t, outside, 0o555)
-		link := filepath.Join(root, "agents-dashboard.app", "Contents", "LinkedResources")
+		link := filepath.Join(root, "Agents Dashboard.app", "Contents", "LinkedResources")
 		if err := os.Symlink(outside, link); err != nil {
 			t.Fatal(err)
 		}

@@ -3,7 +3,7 @@ Version=1.0
 Name=Agents Dashboard
 Comment=Agents Dashboard
 # The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/agents-dashboard %u
+Exec="/usr/local/bin/Agents Dashboard" %u
 Terminal=false
 Type=Application
 Icon=agents-dashboard

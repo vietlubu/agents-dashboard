@@ -6,12 +6,12 @@ import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const EXPECTED_ASSETS = Object.freeze([
-  'agents-dashboard-darwin-arm64.zip',
+  'agents-dashboard-macos-arm64.zip',
   'agents-dashboard-windows-amd64.exe',
   'agents-dashboard-windows-amd64-installer.exe',
   'agents-dashboard-linux-amd64.tar.gz',
   'agents-dashboard-linux-arm64.tar.gz',
-  'agents-dashboard-server-darwin-arm64.tar.gz',
+  'agents-dashboard-server-macos-arm64.tar.gz',
   'agents-dashboard-server-windows-amd64.zip',
   'agents-dashboard-server-linux-amd64.tar.gz',
   'agents-dashboard-server-linux-arm64.tar.gz',
@@ -347,9 +347,9 @@ export async function publish({ repository, sha, token, tag, runId, assetDir,
     `Workflow: https://github.com/${repository}/actions/runs/${runId}`,
     '',
     'Installation:',
-    '- macOS: extract the ZIP and copy agents-dashboard.app to a writable local folder before running.',
-    '- Windows: the installer installs per-user and bootstraps WebView2; the standalone EXE is also available.',
-    '- Linux: extract the portable tarball; GTK 4.14+ and WebKitGTK 6.0 runtime libraries are required.',
+    '- macOS: extract the ZIP and copy Agents Dashboard.app to a writable local folder before running.',
+    '- Windows: the installer installs Agents Dashboard.exe per-user and bootstraps WebView2; the standalone EXE is also available.',
+    '- Linux: extract the portable tarball and run Agents Dashboard; GTK 4.14+ and WebKitGTK 6.0 runtime libraries are required.',
     '- These builds have no paid signing certificates: macOS is ad-hoc signed, not notarized; Windows is not Authenticode signed. Gatekeeper or SmartScreen may require first-install approval.',
     '- SHA256SUMS verifies download integrity; it is not an independent code signature.',
   ].join('\n');

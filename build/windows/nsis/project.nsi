@@ -33,6 +33,8 @@ Unicode true
 ####
 ## Include the wails tools
 ####
+!define PRODUCT_EXECUTABLE "Agents Dashboard.exe"
+
 !include "wails_tools.nsh"
 
 !ifndef INFO_NUMERICVERSION
