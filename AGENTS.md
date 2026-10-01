@@ -80,6 +80,7 @@ End-to-end:
 | `frontend/src/` | Vue app: `api/` (thin binding seam), `stores/`, `views/`, `components/`, `composables/`, `lib/`, `i18n/`, `styles/` |
 | `frontend/bindings/` | **generated** TS bindings — never hand-edit |
 | `build/` | Wails Taskfiles per platform, icons, Dockerfiles, packaging config |
+| `docs/screenshots/` | dashboard screenshots referenced by `README.md` |
 
 ## Development Commands
 
@@ -111,6 +112,23 @@ Frontend alone (rarely needed; the Taskfile drives it in-tree):
 cd frontend && pnpm install && pnpm dev   # vite, port 9245, strictPort
 cd frontend && pnpm build                 # vue-tsc && vite build --mode production
 ```
+
+## Git & Commits
+
+A change is not finished until it is committed. After completing a work unit, stage the files
+it touched and commit them in the same turn — never leave finished work sitting in the tree.
+
+- Subject: `<type>: <imperative summary>`, lowercase, no trailing period, ≤ 72 characters.
+  Types in use: `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `chore`, `build`.
+- Body when the change is not self-evident: bullets naming the files/symbols touched and why,
+  wrapped near 80 columns. No tool/assistant attribution lines, no emoji.
+- One commit per work unit. Unrelated edits get their own commit; never fold a drive-by
+  refactor into a feature commit.
+- Stage by path (`git add README.md docs/`). Never `git add -A` / `git commit -a` while the
+  tree holds unrelated edits, and never commit `bin/`, `frontend/dist/`, `frontend/node_modules/`,
+  `.task/` or `*.db*` (all gitignored — a `-f` add is always wrong here).
+- Check `git status` before committing so nothing unintended is staged. Do not amend, rebase
+  or force-push shared history unless asked to.
 
 ## Code Conventions & Common Patterns
 
@@ -211,8 +229,7 @@ cd frontend && pnpm build                 # vue-tsc && vite build --mode product
   `.editorconfig`, no `.gitattributes`, no CI, no pre-commit hooks, no `LICENSE` file.
   `gofmt`/`go vet` conventions apply by default; there is no enforcement.
 - Known inconsistencies: `build/windows/Taskfile.yml` MSIX path references a non-existent
-  `wails.json`; root `README.md` is the stock Wails template (use this file instead);
-  `build/config.yml` still carries template identity (`My Company` / `0.0.1`).
+  `wails.json`; `build/config.yml` still carries template identity (`My Company` / `0.0.1`).
 
 ## Testing & QA
 
