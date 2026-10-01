@@ -71,7 +71,7 @@ async function update(rule: api.PriceRule, patch: Partial<api.PriceRule>) {
               style="width: 80px"
               :step="0.1"
               :min="0"
-              :model-value="rule.inputMult"
+              v-model="rule.inputMult"
               @change="update(rule, { inputMult: $event })"
             />
           </td>
@@ -80,7 +80,7 @@ async function update(rule: api.PriceRule, patch: Partial<api.PriceRule>) {
               style="width: 80px"
               :step="0.1"
               :min="0"
-              :model-value="rule.outputMult"
+              v-model="rule.outputMult"
               @change="update(rule, { outputMult: $event })"
             />
           </td>
@@ -89,7 +89,7 @@ async function update(rule: api.PriceRule, patch: Partial<api.PriceRule>) {
               style="width: 80px"
               :step="0.1"
               :min="0"
-              :model-value="rule.cacheReadMult"
+              v-model="rule.cacheReadMult"
               @change="update(rule, { cacheReadMult: $event })"
             />
           </td>
@@ -98,7 +98,7 @@ async function update(rule: api.PriceRule, patch: Partial<api.PriceRule>) {
               style="width: 80px"
               :step="0.1"
               :min="0"
-              :model-value="rule.cacheWriteMult"
+              v-model="rule.cacheWriteMult"
               @change="update(rule, { cacheWriteMult: $event })"
             />
           </td>

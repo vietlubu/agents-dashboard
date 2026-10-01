@@ -30,71 +30,78 @@ const emit = defineEmits<{
 }>();
 
 const inputRef = ref<HTMLInputElement | null>(null);
+const currentValue = ref(Number(props.modelValue ?? props.min ?? 0));
+const atMin = computed(() => props.min !== undefined && currentValue.value <= props.min);
+const atMax = computed(() => props.max !== undefined && currentValue.value >= props.max);
 
-const decimals = computed(() => {
-  const s = String(props.step ?? 1);
-  return (s.split(".")[1] || "").length;
-});
+watch(
+  () => props.modelValue,
+  (value) => {
+    currentValue.value = Number(value ?? props.min ?? 0);
+  }
+);
 
-function clamp(val: number): number {
-  let v = Number(val.toFixed(decimals.value));
-  if (props.min !== undefined && v < props.min) v = props.min;
-  if (props.max !== undefined && v > props.max) v = props.max;
-  return v;
+function clamp(value: number): number {
+  if (props.min !== undefined && value < props.min) return props.min;
+  if (props.max !== undefined && value > props.max) return props.max;
+  return value;
 }
 
 function onInput(event: Event) {
   const target = event.target as HTMLInputElement;
   const raw = target.value;
-  if (raw === "") return;
-  const num = Number(raw);
-  if (!isNaN(num)) {
-    emit("update:modelValue", num);
+  if (raw === "") {
+    currentValue.value = Number.NaN;
+    return;
+  }
+  const value = Number(raw);
+  if (Number.isFinite(value)) {
+    currentValue.value = value;
+    emit("update:modelValue", value);
   }
 }
 
 function onChange(event: Event) {
   const target = event.target as HTMLInputElement;
   const raw = target.value;
-  if (raw === "" || isNaN(Number(raw))) {
-    const fallback = props.min ?? 0;
-    target.value = String(fallback);
-    emit("update:modelValue", fallback);
-    emit("change", fallback);
-    return;
-  }
-  const clamped = clamp(Number(raw));
-  target.value = String(clamped);
-  emit("update:modelValue", clamped);
-  emit("change", clamped);
+  const value = raw === "" || !Number.isFinite(Number(raw))
+    ? props.min ?? 0
+    : clamp(Number(raw));
+  target.value = String(value);
+  currentValue.value = value;
+  emit("update:modelValue", value);
+  emit("change", value);
 }
 
-function stepBy(delta: number) {
-  if (props.disabled) return;
-  const current = Number(props.modelValue ?? props.min ?? 0);
-  const next = clamp(current + delta * (props.step ?? 1));
-  if (inputRef.value) {
-    inputRef.value.value = String(next);
+function stepBy(delta: number): boolean {
+  if (props.disabled || !inputRef.value) return false;
+  const input = inputRef.value;
+  const before = input.value;
+  try {
+    if (delta > 0) input.stepUp(delta);
+    else input.stepDown(-delta);
+  } catch {
+    return false;
   }
-  emit("update:modelValue", next);
-  emit("change", next);
+  const stepped = Number(input.value);
+  if (input.value === before || !Number.isFinite(stepped)) return false;
+
+  const value = clamp(stepped);
+  input.value = String(value);
+  currentValue.value = value;
+  emit("update:modelValue", value);
+  return true;
+}
+
+function atBound(delta: number): boolean {
+  return delta > 0 ? atMax.value : atMin.value;
 }
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 let interval: ReturnType<typeof setInterval> | null = null;
+let stepping = false;
 
-function startStepping(delta: number) {
-  if (props.disabled) return;
-  stepBy(delta);
-  clearStepping();
-  timer = setTimeout(() => {
-    interval = setInterval(() => {
-      stepBy(delta);
-    }, 60);
-  }, 350);
-}
-
-function clearStepping() {
+function clearStepping(commit = true) {
   if (timer) {
     clearTimeout(timer);
     timer = null;
@@ -103,9 +110,45 @@ function clearStepping() {
     clearInterval(interval);
     interval = null;
   }
+  window.removeEventListener("pointerup", onPointerEnd);
+  window.removeEventListener("pointercancel", onPointerEnd);
+  if (stepping && commit && inputRef.value) {
+    emit("change", Number(inputRef.value.value));
+  }
+  stepping = false;
 }
 
-onUnmounted(clearStepping);
+function onPointerEnd() {
+  clearStepping();
+}
+
+function startStepping(delta: number) {
+  clearStepping(false);
+  if (props.disabled || !inputRef.value) return;
+  inputRef.value.focus({ preventScroll: true });
+  if (!stepBy(delta)) return;
+
+  stepping = true;
+  window.addEventListener("pointerup", onPointerEnd, { once: true });
+  window.addEventListener("pointercancel", onPointerEnd, { once: true });
+  if (atBound(delta)) {
+    clearStepping();
+    return;
+  }
+  timer = setTimeout(() => {
+    interval = setInterval(() => {
+      if (!stepBy(delta) || atBound(delta)) clearStepping();
+    }, 60);
+  }, 350);
+}
+
+function activateStep(event: MouseEvent, delta: number) {
+  if (event.detail !== 0 || props.disabled) return;
+  inputRef.value?.focus({ preventScroll: true });
+  if (stepBy(delta) && inputRef.value) emit("change", Number(inputRef.value.value));
+}
+
+onUnmounted(() => clearStepping(false));
 </script>
 
 <template>
@@ -128,13 +171,11 @@ onUnmounted(clearStepping);
     <div v-if="props.stepper" class="steppers">
       <button
         type="button"
-        tabindex="-1"
         class="step-btn step-up"
-        :disabled="props.disabled || (props.max !== undefined && Number(props.modelValue) >= props.max)"
+        :disabled="props.disabled || atMax"
         aria-label="Increment"
-        @mousedown.prevent="startStepping(1)"
-        @mouseup="clearStepping"
-        @mouseleave="clearStepping"
+        @pointerdown.prevent="startStepping(1)"
+        @click="activateStep($event, 1)"
       >
         <svg width="8" height="5" viewBox="0 0 8 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
           <path d="M1 4L4 1L7 4" />
@@ -142,13 +183,11 @@ onUnmounted(clearStepping);
       </button>
       <button
         type="button"
-        tabindex="-1"
         class="step-btn step-down"
-        :disabled="props.disabled || (props.min !== undefined && Number(props.modelValue) <= props.min)"
+        :disabled="props.disabled || atMin"
         aria-label="Decrement"
-        @mousedown.prevent="startStepping(-1)"
-        @mouseup="clearStepping"
-        @mouseleave="clearStepping"
+        @pointerdown.prevent="startStepping(-1)"
+        @click="activateStep($event, -1)"
       >
         <svg width="8" height="5" viewBox="0 0 8 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
           <path d="M1 1L4 4L7 1" />
