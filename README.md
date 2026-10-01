@@ -1,8 +1,8 @@
 # Agents Dashboard
 
 A local usage tracker for coding agents. It reads the session and telemetry files that
-**Claude Code, Codex, OpenCode, Pi and omp** already write on your machine, normalizes them
-into its own SQLite database, and serves a dashboard from that database.
+**Claude Code, Codex, OpenCode, Pi, omp and Freebuff** already write on your machine,
+normalizes them into its own SQLite database, and serves a dashboard from that database.
 
 One Go binary, two shapes: a native desktop window (Wails v3 webview) or — with
 `-tags server` — a headless HTTP server serving the identical embedded frontend.
@@ -50,6 +50,12 @@ One Go binary, two shapes: a native desktop window (Wails v3 webview) or — wit
 | `opencode` | `~/.local/share/opencode/opencode*.db` |
 | `pi` | `~/.pi/agent/sessions` |
 | `omp` | `~/.omp/stats.db` + `~/.omp/agent/sessions` |
+| `freebuff` | `~/.config/manicode/projects/**/chats/*/log.jsonl` |
+| `freebuff-desktop` | `~/.config/freebuff-desktop/projects/*/desktop-v2.db` |
+
+Freebuff meters in Freebucks and reports context occupancy rather than billed tokens or
+USD, so its two harnesses record the per-step context increase with no cost, shown as
+*unavailable* rather than `$0`.
 
 Additional roots can be registered per harness in **Settings → Scan roots**; they are merged
 with the built-in roots and de-duplicated. A root that does not exist yet is shown as the

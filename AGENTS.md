@@ -1,8 +1,8 @@
 # Repository Guidelines
 
 Local usage tracker for coding agents. It reads the session/telemetry files that
-**Claude Code, Codex, OpenCode, Pi and omp** already write, normalizes them into its own
-SQLite database, and serves a dashboard from that database.
+**Claude Code, Codex, OpenCode, Pi, omp and Freebuff** already write, normalizes them into
+its own SQLite database, and serves a dashboard from that database.
 
 One Go binary, two shapes:
 - default build → native desktop window (Wails v3 webview)
@@ -27,8 +27,10 @@ End-to-end:
 
 1. **Sources** — agent-written files/DBs: `~/.claude/projects/**/*.jsonl`,
    `~/.codex/sessions` (+ `state_5.sqlite`), `~/.local/share/opencode/opencode*.db`,
-   `~/.pi/agent/sessions`, `~/.omp/stats.db` + `~/.omp/agent/sessions`; plus extra roots
-   from the `scan_roots` table merged by `harness.ResolveRoots`.
+   `~/.pi/agent/sessions`, `~/.omp/stats.db` + `~/.omp/agent/sessions`,
+   `~/.config/manicode/projects/**/chats/*/log.jsonl`,
+   `~/.config/freebuff-desktop/projects/*/desktop-v2.db`; plus extra roots from the
+   `scan_roots` table merged by `harness.ResolveRoots`.
 2. **Parse** — each `harness.Adapter.Scan` walks files newest-first, prefiltering lines by
    byte marker (e.g. `claudeMarker = {"usage","assistant"}`), JSON-decoding into fixed
    whitelist structs. **Never `map[string]any`** — prompt/response text is never read
@@ -71,7 +73,7 @@ End-to-end:
 |---|---|
 | `main.go`, `window_desktop.go`, `window_server.go` | composition root; build-tagged window openers (`//go:build !server` / `server`) |
 | `cmd/scan-report/` | CLI: one full scan into a throwaway DB, prints per-harness table or JSON |
-| `internal/harness/` | one file per agent adapter (`claude.go`, `codex.go`, `opencode.go`, `pi.go`, `omp.go`) + shared `sink.go`, `jsonl.go`, `registry.go`, `xtsqlite.go` |
+| `internal/harness/` | one file per agent adapter (`claude.go`, `codex.go`, `opencode.go`, `pi.go`, `omp.go`, `freebuff.go`, `freebuffdesktop.go`) + shared `sink.go`, `jsonl.go`, `registry.go`, `xtsqlite.go` |
 | `internal/store/` | `schema.go` DDL, `db.go` handles/DSN, `query.go` reads, `rollups.go`, `dto.go` |
 | `internal/sync/` | `engine.go`, `scheduler.go`, `report.go` |
 | `internal/service/` | Wails bindings: `app/service.go`, `dashboard.go`, `events.go`, `meta.go`, `settings.go`, `sync.go` |

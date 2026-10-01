@@ -1,5 +1,5 @@
 // Command agents-dashboard is a local usage tracker for coding agents. It reads the session
-// files that Claude Code, Codex, OpenCode, Pi and omp already write, stores normalized
+// files that Claude Code, Codex, OpenCode, Pi, omp and Freebuff already write, stores normalized
 // usage in its own SQLite database, and serves a dashboard from that database.
 //
 // The same code builds as a desktop application or, with `-tags server`, as a headless

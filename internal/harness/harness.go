@@ -1,6 +1,6 @@
 // Package harness reads the on-disk session/telemetry files that coding agents write
-// and normalizes them into usage events. Each harness is one Adapter; adding a sixth
-// harness means adding one file and one line in All().
+// and normalizes them into usage events. Each harness is one Adapter; adding a harness
+// means adding one file and one line in All().
 //
 // Privacy contract: adapters decode only usage, model, identifier and timestamp fields
 // into fixed structs. Prompt and response text is never read, never buffered, and never

@@ -299,14 +299,14 @@ func TestEngineReportListsEveryHarness(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Report: %v", err)
 	}
-	if len(report) != 5 {
-		t.Fatalf("report has %d harnesses, want 5", len(report))
+	if len(report) != 7 {
+		t.Fatalf("report has %d harnesses, want 7", len(report))
 	}
 	byID := map[string]store.HarnessReport{}
 	for _, r := range report {
 		byID[r.ID] = r
 	}
-	for _, id := range []string{"claude", "codex", "opencode", "pi", "omp"} {
+	for _, id := range []string{"claude", "codex", "opencode", "pi", "omp", "freebuff", "freebuff-desktop"} {
 		if _, ok := byID[id]; !ok {
 			t.Errorf("harness %q missing from the report", id)
 		}
