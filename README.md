@@ -58,8 +58,10 @@ expected location rather than an error.
 ## Privacy
 
 The parsers JSON-decode into fixed whitelist structs. Prompt text, response text and tool
-payloads are **never** read into memory, and nothing ever leaves the machine — the only
-outbound requests are price-catalog downloads (disable with `AGENTS_DASHBOARD_AUTO_SYNC_PRICES=false`).
+payloads are **never** read into memory, and usage/session data never leaves the machine.
+Outbound requests are price-catalog downloads (disable with
+`AGENTS_DASHBOARD_AUTO_SYNC_PRICES=false`) and desktop release checks against GitHub.
+Update payloads are downloaded only after explicit confirmation.
 
 ## Install & run
 
@@ -98,6 +100,23 @@ Cross-compilation uses the `GOOS` variable (dev mode is desktop-only):
 task build GOOS=windows
 task build GOOS=linux ARCH=arm64
 ```
+
+### Desktop updates
+
+Stamped desktop releases check GitHub at startup and once every 24 hours.
+An available-update banner links to **Settings → About**; it never downloads
+anything or opens a popup. **Check for updates** uses the same check-only path.
+**Update and restart** asks for confirmation of the exact tag before download,
+SHA-256 verification and normal application shutdown/restart. Cancel does not
+download anything. Failed downloads or verification leave the old process
+running; database and settings remain in their existing data directory.
+
+Blocked installations still show the release/manual-install link. Server and
+development builds do not initialize the updater or contact the release feed.
+macOS builds are ad-hoc signed, not notarized; Windows builds have no Authenticode
+signature. First-install Gatekeeper/SmartScreen approval may be required.
+Checksums protect integrity, not independent publisher authentication: updates
+trust the GitHub repository over HTTPS.
 
 ### Headless / server mode
 
@@ -160,7 +179,8 @@ main.go (composition root)
             ├─ internal/harness   per-agent adapters, file/DB parsing
             ├─ internal/pricing   cost resolution + catalog sync
             └─ internal/store     SQLite schema + every read/write path
-       └─ internal/config        env defaults + mutable runtime config
+       ├─ internal/config        env defaults + mutable runtime config
+       └─ internal/update        CalVer provider + safe install capability
 internal/version                 build stamp
 ```
 
@@ -180,6 +200,7 @@ polling: `data:changed` bumps a version counter that refetches the live queries.
 | `internal/sync/` | Engine, adaptive scheduler, reporting |
 | `internal/service/` | Wails bindings (dashboard, events, meta, settings, sync) |
 | `internal/pricing/` | Price catalog, catalog sync, model normalization |
+| `internal/update/` | Wails GitHub adapter and platform-specific install preflight |
 | `frontend/src/api/` | The single seam over generated bindings |
 | `frontend/src/views/`, `components/`, `stores/`, `composables/` | Vue 3 + TypeScript UI |
 | `build/` | Wails Taskfiles per platform, icons, Dockerfiles, packaging |

@@ -19,5 +19,6 @@ export {
 export type {
     PricingSyncedPayload,
     SessionDetail,
-    SyncStatus
+    SyncStatus,
+    UpdateStatus
 } from "./models.js";

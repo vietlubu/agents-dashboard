@@ -7,9 +7,11 @@ package service
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/updater"
 
 	"github.com/vietlubu/agents-dashboard/internal/config"
 	"github.com/vietlubu/agents-dashboard/internal/pricing"
@@ -28,18 +30,21 @@ const (
 	EventDataChanged   = syncengine.EventData
 	EventPricingSynced = "pricing:synced"
 	EventSettingsSaved = "settings:saved"
+	EventAppUpdate     = "app:update"
 )
 
 // Deps is what every service needs. One instance is shared so all services see the same
 // database, configuration and scan engine.
 type Deps struct {
-	DB        *store.DB
-	Cfg       *config.Config
-	Engine    *syncengine.Engine
-	Scheduler *syncengine.Scheduler
-	Catalog   *pricing.Catalog
-	Log       *slog.Logger
-	Emit      func(name string, payload any)
+	DB                    *store.DB
+	Cfg                   *config.Config
+	Engine                *syncengine.Engine
+	Scheduler             *syncengine.Scheduler
+	Catalog               *pricing.Catalog
+	Log                   *slog.Logger
+	Emit                  func(name string, payload any)
+	Updater               *updater.Updater
+	UpdaterDisabledReason string
 }
 
 // loc is the configured timezone, used by every read path so day buckets agree with what
@@ -83,10 +88,19 @@ type PricingSyncedPayload struct {
 // up, and reports startup warnings exactly once.
 type AppService struct {
 	deps *Deps
+
+	updateOperation   sync.Mutex
+	updateMu          sync.Mutex
+	updateStatus      UpdateStatus
+	updateCancel      context.CancelFunc
+	updateDone        chan struct{}
+	installCapability func() (string, error)
 }
 
 // NewAppService builds the lifecycle service.
-func NewAppService(deps *Deps) *AppService { return &AppService{deps: deps} }
+func NewAppService(deps *Deps) *AppService {
+	return newAppService(deps, currentInstallCapability)
+}
 
 // ServiceStartup runs once the application is running. The scan starts here rather than
 // before the window exists, so the UI is already listening for progress events.
@@ -95,12 +109,17 @@ func (s *AppService) ServiceStartup(ctx context.Context, _ application.ServiceOp
 	if deps.Scheduler != nil {
 		deps.Scheduler.Start(ctx)
 	}
-	go s.autoSyncPrices(ctx)
+	if deps.Cfg != nil {
+		go s.autoSyncPrices(ctx)
+	}
+	s.setUpdateStatus(s.UpdateStatus())
+	s.startUpdateLoop(ctx)
 	return nil
 }
 
-// ServiceShutdown stops the scan loop.
+// ServiceShutdown stops the background update and scan loops.
 func (s *AppService) ServiceShutdown() error {
+	s.stopUpdateLoop()
 	if s.deps.Scheduler != nil {
 		s.deps.Scheduler.Stop()
 	}

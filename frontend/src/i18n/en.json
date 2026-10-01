@@ -211,6 +211,29 @@
     "saved": "Settings saved.",
     "rebuilt": "Rebuilt daily aggregates for the new timezone."
   },
+  "updates": {
+    "available": "Update {version} is available.",
+    "check": "Check for updates",
+    "checking": "Checking for updates…",
+    "upToDate": "You're up to date.",
+    "install": "Update and restart",
+    "confirm": "Install {version}? The application will close and restart.",
+    "installing": "Downloading and installing the update…",
+    "restarting": "Restarting the application…",
+    "viewRelease": "View release and manual installation",
+    "openSettings": "Open Settings",
+    "idle": "Ready to check for updates.",
+    "error": "Could not check for updates. Try checking again.",
+    "disabled": {
+      "server": "Self-update is available only in desktop releases, not in server mode.",
+      "development": "Self-update is available only in desktop releases, not in development builds.",
+      "unsupportedPlatform": "This platform or installation does not support self-update. Install updates manually from GitHub Releases."
+    },
+    "blocked": {
+      "notWritable": "The installation directory is not writable. Install the update manually from the release page.",
+      "crossFilesystem": "The application and temporary download directory are on different filesystems. Install the update manually from the release page."
+    }
+  },
   "dims": {
     "harness": "Harness",
     "model": "Model",

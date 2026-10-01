@@ -18,6 +18,7 @@ import type * as sync$0 from "../../../../vietlubu/agents-dashboard/internal/syn
 declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
+            "app:update": service$0.UpdateStatus;
             "data:changed": sync$0.DataChangedEvent;
             "pricing:synced": service$0.PricingSyncedPayload;
             "settings:saved": store$0.Settings;

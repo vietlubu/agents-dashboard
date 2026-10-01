@@ -11,6 +11,34 @@
 // @ts-ignore: Unused imports
 import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as $models from "./models.js";
+
+/**
+ * CheckForUpdates only discovers an update; no payload is downloaded without
+ * a subsequent InstallUpdate call confirming the exact available version.
+ */
+export function CheckForUpdates(): $CancellablePromise<$models.UpdateStatus> {
+    return $Call.ByID(1386704687);
+}
+
+/**
+ * InstallUpdate requires the exact tag the user confirmed. Wails owns download,
+ * checksum verification, staging and restart through the normal shutdown path.
+ */
+export function InstallUpdate(expectedVersion: string): $CancellablePromise<void> {
+    return $Call.ByID(1447417522, expectedVersion);
+}
+
+/**
+ * UpdateStatus derives enabled state from the current dependencies: composition
+ * configures the updater after this service has already been constructed.
+ */
+export function UpdateStatus(): $CancellablePromise<$models.UpdateStatus> {
+    return $Call.ByID(2245583475);
+}
+
 /**
  * Version returns the build version, for the about panel.
  */

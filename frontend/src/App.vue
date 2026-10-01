@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
-import { RouterView, useRoute } from "vue-router";
+import { computed, onMounted, onUnmounted } from "vue";
+import { RouterLink, RouterView, useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import AppSidebar from "@/components/layout/AppSidebar.vue";
 import HeaderControls from "@/components/layout/HeaderControls.vue";
@@ -10,11 +10,13 @@ import FilterBar from "@/components/layout/FilterBar.vue";
 import { useSettingsStore } from "@/stores/settings";
 import { useSyncStore } from "@/stores/sync";
 import { useFiltersStore } from "@/stores/filters";
+import { useUpdateStore } from "@/stores/update";
 import { applyTheme } from "@/lib/theme";
 
 const settings = useSettingsStore();
 const sync = useSyncStore();
 const filters = useFiltersStore();
+const update = useUpdateStore();
 const { locale } = useI18n();
 const route = useRoute();
 
@@ -25,6 +27,7 @@ const showChrome = computed(() => route.path !== "/settings");
 const showSyncStatus = computed(() => route.path === "/settings");
 
 onMounted(async () => {
+  update.start();
   await settings.load();
   applyTheme(settings.theme);
   locale.value = settings.locale;
@@ -37,6 +40,8 @@ onMounted(async () => {
   });
   void stop;
 });
+
+onUnmounted(() => update.stop());
 </script>
 
 <template>
@@ -61,6 +66,11 @@ onMounted(async () => {
 
       <div v-if="sync.lastError" class="note" style="margin-bottom: 12px">
         {{ sync.lastError }}
+      </div>
+
+      <div v-if="update.status?.state === 'available'" class="note row-wrap" style="margin-bottom: 12px" aria-live="polite">
+        <span>{{ $t('updates.available', { version: update.status.latestVersion }) }}</span>
+        <RouterLink to="/settings">{{ $t('updates.openSettings') }}</RouterLink>
       </div>
 
       <RouterView />

@@ -211,6 +211,29 @@
     "saved": "Đã lưu cài đặt.",
     "rebuilt": "Đã tính lại số liệu theo ngày cho múi giờ mới."
   },
+  "updates": {
+    "available": "Có bản cập nhật {version}.",
+    "check": "Kiểm tra cập nhật",
+    "checking": "Đang kiểm tra cập nhật…",
+    "upToDate": "Bạn đang dùng phiên bản mới nhất.",
+    "install": "Cập nhật và khởi động lại",
+    "confirm": "Cài {version}? Ứng dụng sẽ đóng và khởi động lại.",
+    "installing": "Đang tải và cài bản cập nhật…",
+    "restarting": "Đang khởi động lại ứng dụng…",
+    "viewRelease": "Xem bản phát hành và cài đặt thủ công",
+    "openSettings": "Mở Cài đặt",
+    "idle": "Sẵn sàng kiểm tra cập nhật.",
+    "error": "Không thể kiểm tra cập nhật. Hãy kiểm tra lại.",
+    "disabled": {
+      "server": "Tự cập nhật chỉ có trong bản phát hành desktop, không có ở chế độ server.",
+      "development": "Tự cập nhật chỉ có trong bản phát hành desktop, không có trong bản phát triển.",
+      "unsupportedPlatform": "Nền tảng hoặc cách cài đặt này không hỗ trợ tự cập nhật. Hãy cài thủ công từ GitHub Releases."
+    },
+    "blocked": {
+      "notWritable": "Không có quyền ghi vào thư mục cài đặt. Hãy cài bản cập nhật thủ công từ trang phát hành.",
+      "crossFilesystem": "Ứng dụng và thư mục tải tạm nằm trên hai hệ thống tệp khác nhau. Hãy cài bản cập nhật thủ công từ trang phát hành."
+    }
+  },
   "dims": {
     "harness": "Harness",
     "model": "Model",

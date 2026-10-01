@@ -41,6 +41,7 @@ func init() {
 	application.RegisterEvent[syncengine.DataChangedEvent](service.EventDataChanged)
 	application.RegisterEvent[service.PricingSyncedPayload](service.EventPricingSynced)
 	application.RegisterEvent[store.Settings](service.EventSettingsSaved)
+	application.RegisterEvent[service.UpdateStatus](service.EventAppUpdate)
 }
 
 func main() {
@@ -112,6 +113,10 @@ func main() {
 		},
 	})
 	engine.SetEmitter(deps.Emit)
+	if err := configureUpdater(app, deps); err != nil {
+		logger.Error("cannot configure updater", "version", version.Version, "error", err)
+		os.Exit(1)
+	}
 
 	// Persisted settings are applied before the first scan so a configured timezone buckets
 	// the very first day correctly. A failure here is logged, not fatal: the defaults apply.

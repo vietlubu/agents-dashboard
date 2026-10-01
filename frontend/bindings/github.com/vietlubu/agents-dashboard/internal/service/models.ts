@@ -33,3 +33,17 @@ export interface SyncStatus {
     "intervalMs": number;
     "burst": boolean;
 }
+
+/**
+ * UpdateStatus is the complete desktop update snapshot shared with the frontend.
+ */
+export interface UpdateStatus {
+    "enabled": boolean;
+    "canInstall": boolean;
+    "state": string;
+    "currentVersion": string;
+    "latestVersion": string;
+    "releaseUrl": string;
+    "reason": string;
+    "error": string;
+}

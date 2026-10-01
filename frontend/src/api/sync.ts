@@ -30,4 +30,5 @@ export const EVENTS = {
   dataChanged: "data:changed",
   pricingSynced: "pricing:synced",
   settingsSaved: "settings:saved",
+  appUpdate: "app:update",
 } as const;
