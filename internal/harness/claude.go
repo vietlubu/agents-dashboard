@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/vietlubu/agent-dashboard/internal/config"
+	"github.com/vietlubu/agents-dashboard/internal/config"
 )
 
 // claudeParserVersion is bumped when the Claude parse rules change. The sync engine then

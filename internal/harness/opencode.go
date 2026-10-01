@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/vietlubu/agent-dashboard/internal/config"
+	"github.com/vietlubu/agents-dashboard/internal/config"
 )
 
 const opencodeParserVersion = 1

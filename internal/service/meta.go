@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"github.com/vietlubu/agent-dashboard/internal/store"
+	"github.com/vietlubu/agents-dashboard/internal/store"
 )
 
 // MetaService serves the dimensions the UI filters by: harnesses, facet values, sessions.

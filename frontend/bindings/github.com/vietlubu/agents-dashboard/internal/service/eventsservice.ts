@@ -18,7 +18,7 @@ import * as store$0 from "../store/models.js";
  * Columns returns the column names available for the export and the column settings modal.
  */
 export function Columns(): $CancellablePromise<string[] | null> {
-    return $Call.ByID(3963644866);
+    return $Call.ByID(348747729);
 }
 
 /**
@@ -27,12 +27,12 @@ export function Columns(): $CancellablePromise<string[] | null> {
  * dialogs do not exist; the frontend turns it into a download.
  */
 export function Export(q: store$0.RangeQuery, format: string): $CancellablePromise<store$0.ExportResult> {
-    return $Call.ByID(546539813, q, format);
+    return $Call.ByID(930093288, q, format);
 }
 
 /**
  * List returns a page of events, newest first, with the total match count.
  */
 export function List(q: store$0.RangeQuery, offset: number, limit: number): $CancellablePromise<store$0.EventPage> {
-    return $Call.ByID(1830809055, q, offset, limit);
+    return $Call.ByID(3176361702, q, offset, limit);
 }

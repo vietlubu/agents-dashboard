@@ -6,7 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/vietlubu/agent-dashboard/internal/store"
+	"github.com/vietlubu/agents-dashboard/internal/store"
 )
 
 // Snapshot is an immutable view of the price table and its rules. Reads take the pointer

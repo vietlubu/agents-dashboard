@@ -1,8 +1,8 @@
 // Sync API and the event stream.
-import * as Sync from "@bindings/github.com/vietlubu/agent-dashboard/internal/service/syncservice";
-import type * as ServiceModels from "@bindings/github.com/vietlubu/agent-dashboard/internal/service/models";
-import type * as StoreModels from "@bindings/github.com/vietlubu/agent-dashboard/internal/store/models";
-import type * as SyncModels from "@bindings/github.com/vietlubu/agent-dashboard/internal/sync/models";
+import * as Sync from "@bindings/github.com/vietlubu/agents-dashboard/internal/service/syncservice";
+import type * as ServiceModels from "@bindings/github.com/vietlubu/agents-dashboard/internal/service/models";
+import type * as StoreModels from "@bindings/github.com/vietlubu/agents-dashboard/internal/store/models";
+import type * as SyncModels from "@bindings/github.com/vietlubu/agents-dashboard/internal/sync/models";
 
 export type SyncStatus = ServiceModels.SyncStatus;
 export type RunSummary = SyncModels.RunSummary;

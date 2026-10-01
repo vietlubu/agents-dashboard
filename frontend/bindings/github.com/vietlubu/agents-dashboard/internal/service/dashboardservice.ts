@@ -21,7 +21,7 @@ import * as store$0 from "../store/models.js";
  * project, agentType, outcome, costSource.
  */
 export function Breakdown(q: store$0.RangeQuery, dim: string, limit: number): $CancellablePromise<store$0.BreakdownRow[] | null> {
-    return $Call.ByID(67450815, q, dim, limit);
+    return $Call.ByID(3006359798, q, dim, limit);
 }
 
 /**
@@ -29,7 +29,7 @@ export function Breakdown(q: store$0.RangeQuery, dim: string, limit: number): $C
  * what the delta badges are computed from.
  */
 export function Compare(q: store$0.RangeQuery): $CancellablePromise<store$0.Comparison> {
-    return $Call.ByID(4146527555, q);
+    return $Call.ByID(2071309770, q);
 }
 
 /**
@@ -37,14 +37,14 @@ export function Compare(q: store$0.RangeQuery): $CancellablePromise<store$0.Comp
  * to hardcode them.
  */
 export function Dims(): $CancellablePromise<string[] | null> {
-    return $Call.ByID(1106218771);
+    return $Call.ByID(2120955840);
 }
 
 /**
  * Heatmap returns per-day totals across a window.
  */
 export function Heatmap(fromMs: number, toMs: number): $CancellablePromise<store$0.HeatCell[] | null> {
-    return $Call.ByID(3550787456, fromMs, toMs);
+    return $Call.ByID(2939401773, fromMs, toMs);
 }
 
 /**
@@ -52,14 +52,14 @@ export function Heatmap(fromMs: number, toMs: number): $CancellablePromise<store
  * timings, so the caller must present coverage rather than treating missing rows as zero.
  */
 export function Latency(q: store$0.RangeQuery, limit: number): $CancellablePromise<store$0.LatencyPoint[] | null> {
-    return $Call.ByID(2298250350, q, limit);
+    return $Call.ByID(4097671411, q, limit);
 }
 
 /**
  * Realtime returns per-minute buckets and active sessions for the last `minutes`.
  */
 export function Realtime(minutes: number): $CancellablePromise<store$0.RealtimeSnapshot> {
-    return $Call.ByID(207256473, minutes);
+    return $Call.ByID(3359092950, minutes);
 }
 
 /**
@@ -69,7 +69,7 @@ export function Realtime(minutes: number): $CancellablePromise<store$0.RealtimeS
  * the request when an hourly chart would be unreadable.
  */
 export function Series(q: store$0.RangeQuery, granularity: string): $CancellablePromise<store$0.SeriesResult> {
-    return $Call.ByID(2870600801, q, granularity);
+    return $Call.ByID(2469022354, q, granularity);
 }
 
 /**
@@ -77,14 +77,14 @@ export function Series(q: store$0.RangeQuery, granularity: string): $Cancellable
  * largest `top` values so the legend is stable across days.
  */
 export function Stacked(q: store$0.RangeQuery, dim: string, top: number): $CancellablePromise<store$0.StackedPoint[] | null> {
-    return $Call.ByID(258555325, q, dim, top);
+    return $Call.ByID(1364935700, q, dim, top);
 }
 
 /**
  * Totals aggregates the range.
  */
 export function Totals(q: store$0.RangeQuery): $CancellablePromise<store$0.Totals> {
-    return $Call.ByID(3579932527, q);
+    return $Call.ByID(4246156744, q);
 }
 
 /**
@@ -92,5 +92,5 @@ export function Totals(q: store$0.RangeQuery): $CancellablePromise<store$0.Total
  * instead of leaving a blank in the cost column.
  */
 export function UnpricedModels(): $CancellablePromise<string[] | null> {
-    return $Call.ByID(2448165934);
+    return $Call.ByID(1319947157);
 }

@@ -88,9 +88,9 @@ plain `task <name>` (Taskfile CLI) work.
 
 ```bash
 task dev            # desktop watch mode: builds DEV=true, runs vite on 127.0.0.1:9245, launches app
-task build          # production desktop binary -> bin/agent-dashboard
+task build          # production desktop binary -> bin/agents-dashboard
 task run            # build DEV=true and launch
-task build:server   # headless binary -> bin/agent-dashboard-server (-tags server,production)
+task build:server   # headless binary -> bin/agents-dashboard-server (-tags server,production)
 task run:server     # build DEV=true + run the server
 task build:docker   # build build/docker/Dockerfile.server image
 task run:docker     # docker run --rm -p 8080:8080
@@ -227,7 +227,7 @@ cd frontend && pnpm build                 # vue-tsc && vite build --mode product
   the unexported `modelsDevURL` / `liteLLMURL` catalog fields. Assertions are plain
   `if`/`t.Errorf`. No `t.Parallel()`.
 - `internal/pricing/live_test.go` is the only opt-in network test: skipped under `-short`
-  unless `AGENT_DASHBOARD_LIVE_PRICING` is set.
+  unless `AGENTS_DASHBOARD_LIVE_PRICING` is set.
 - Untested: `internal/service`, `internal/version`, `cmd/scan-report`, root `main.go`.
 - **Frontend has no tests, no linter, no formatter** — `vue-tsc` (type-check) is the only
   automated check, and it only runs as part of `pnpm build` / `pnpm build:dev`.
@@ -238,4 +238,4 @@ cd frontend && pnpm build                 # vue-tsc && vite build --mode product
 
 Desktop features are best verified with `task dev` (hot reload for both sides) or
 `task run`; the headless path with `task run:server` (defaults `localhost:8080`, override via
-`AGENT_DASHBOARD_SERVER_HOST` / `AGENT_DASHBOARD_SERVER_PORT`).
+`AGENTS_DASHBOARD_SERVER_HOST` / `AGENTS_DASHBOARD_SERVER_PORT`).

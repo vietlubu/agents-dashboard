@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/vietlubu/agent-dashboard/internal/config"
-	"github.com/vietlubu/agent-dashboard/internal/harness"
-	"github.com/vietlubu/agent-dashboard/internal/pricing"
-	"github.com/vietlubu/agent-dashboard/internal/store"
+	"github.com/vietlubu/agents-dashboard/internal/config"
+	"github.com/vietlubu/agents-dashboard/internal/harness"
+	"github.com/vietlubu/agents-dashboard/internal/pricing"
+	"github.com/vietlubu/agents-dashboard/internal/store"
 )
 
 // ErrAlreadyRunning is returned when a scan is requested while one is in flight.

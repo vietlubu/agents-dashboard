@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/vietlubu/agent-dashboard/internal/config"
+	"github.com/vietlubu/agents-dashboard/internal/config"
 )
 
 // Scheduler runs the scan loop.

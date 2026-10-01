@@ -23,7 +23,7 @@ import * as store$0 from "../store/models.js";
  * without waiting for the next scheduled pass.
  */
 export function AddScanRoot(harness: string, path: string): $CancellablePromise<store$0.ScanRoot[] | null> {
-    return $Call.ByID(2218397319, harness, path);
+    return $Call.ByID(2593845952, harness, path);
 }
 
 /**
@@ -31,14 +31,14 @@ export function AddScanRoot(harness: string, path: string): $CancellablePromise<
  * which are never modified.
  */
 export function DeleteAllData(): $CancellablePromise<void> {
-    return $Call.ByID(71445891);
+    return $Call.ByID(1089114288);
 }
 
 /**
  * DeletePrice removes a price row.
  */
 export function DeletePrice(modelKey: string): $CancellablePromise<store$0.ModelPrice[] | null> {
-    return $Call.ByID(2776984229, modelKey);
+    return $Call.ByID(4205797238, modelKey);
 }
 
 /**
@@ -46,63 +46,63 @@ export function DeletePrice(modelKey: string): $CancellablePromise<store$0.Model
  * process defaults.
  */
 export function Get(): $CancellablePromise<store$0.Settings> {
-    return $Call.ByID(1734258469);
+    return $Call.ByID(1846414386);
 }
 
 /**
  * PriceRules lists the per-model multipliers.
  */
 export function PriceRules(): $CancellablePromise<store$0.PriceRule[] | null> {
-    return $Call.ByID(3811093659);
+    return $Call.ByID(1514297630);
 }
 
 /**
  * Prices lists the price table.
  */
 export function Prices(): $CancellablePromise<store$0.ModelPrice[] | null> {
-    return $Call.ByID(1859368613);
+    return $Call.ByID(3702899484);
 }
 
 /**
  * RecalculateCosts re-prices every event whose cost came from the price table.
  */
 export function RecalculateCosts(): $CancellablePromise<number> {
-    return $Call.ByID(1009527024);
+    return $Call.ByID(3563766005);
 }
 
 /**
  * RemoveScanRoot forgets an extra root.
  */
 export function RemoveScanRoot(harness: string, path: string): $CancellablePromise<store$0.ScanRoot[] | null> {
-    return $Call.ByID(2675384762, harness, path);
+    return $Call.ByID(3558789435, harness, path);
 }
 
 /**
  * ScanRoots lists the user-added extra roots for every harness.
  */
 export function ScanRoots(): $CancellablePromise<store$0.ScanRoot[] | null> {
-    return $Call.ByID(701075751);
+    return $Call.ByID(1248159060);
 }
 
 /**
  * SetPrice writes a manual price. A manual row is never overwritten by a catalog sync.
  */
 export function SetPrice(p: store$0.ModelPrice): $CancellablePromise<store$0.ModelPrice[] | null> {
-    return $Call.ByID(1564978846, p);
+    return $Call.ByID(2399123167, p);
 }
 
 /**
  * SetPriceRule writes a per-model multiplier rule.
  */
 export function SetPriceRule(r: store$0.PriceRule): $CancellablePromise<store$0.PriceRule[] | null> {
-    return $Call.ByID(3547341448, r);
+    return $Call.ByID(319585281, r);
 }
 
 /**
  * Stats returns the database summary shown on the settings page.
  */
 export function Stats(): $CancellablePromise<store$0.Stats> {
-    return $Call.ByID(791992342);
+    return $Call.ByID(3998194189);
 }
 
 /**
@@ -112,7 +112,7 @@ export function Stats(): $CancellablePromise<store$0.Stats> {
  * catalog the affected events stay "unavailable" and the UI shows a dash.
  */
 export function SyncPrices(source: string): $CancellablePromise<pricing$0.SyncResult> {
-    return $Call.ByID(2650749070, source);
+    return $Call.ByID(899625515, source);
 }
 
 /**
@@ -123,5 +123,5 @@ export function SyncPrices(source: string): $CancellablePromise<pricing$0.SyncRe
  * rebuilt before the call returns. The frontend shows a rebuilding state for the duration.
  */
 export function Update(patch: store$0.SettingsPatch): $CancellablePromise<store$0.Settings> {
-    return $Call.ByID(2113218410, patch);
+    return $Call.ByID(1347118367, patch);
 }

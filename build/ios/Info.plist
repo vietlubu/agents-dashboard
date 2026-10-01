@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>agent-dashboard</string>
+    <string>agents-dashboard</string>
     <key>CFBundleIdentifier</key>
-    <string>com.example.agentdashboard</string>
+    <string>com.example.agentsdashboard</string>
     <key>CFBundleName</key>
-    <string>My Product</string>
+    <string>Agents Dashboard</string>
     <key>CFBundleDisplayName</key>
-    <string>My Product</string>
+    <string>Agents Dashboard</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

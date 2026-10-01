@@ -15,7 +15,7 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
  * Version returns the build version, for the about panel.
  */
 export function Version(): $CancellablePromise<string> {
-    return $Call.ByID(1338814881);
+    return $Call.ByID(945157116);
 }
 
 /**
@@ -23,5 +23,5 @@ export function Version(): $CancellablePromise<string> {
  * them instead of them being lost in a log file.
  */
 export function Warnings(): $CancellablePromise<string[] | null> {
-    return $Call.ByID(244922174);
+    return $Call.ByID(1080663773);
 }

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vietlubu/agent-dashboard/internal/store"
+	"github.com/vietlubu/agents-dashboard/internal/store"
 )
 
 func mustLocation(t *testing.T) *time.Location { return time.UTC }

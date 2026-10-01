@@ -6,17 +6,17 @@ import (
 	"strings"
 )
 
-// HomeDir is the application data directory: <user config dir>/agent-dashboard,
-// overridable with AGENT_DASHBOARD_HOME.
+// HomeDir is the application data directory: <user config dir>/agents-dashboard,
+// overridable with AGENTS_DASHBOARD_HOME.
 func HomeDir() (string, error) {
-	if v := strings.TrimSpace(os.Getenv("AGENT_DASHBOARD_HOME")); v != "" {
+	if v := strings.TrimSpace(os.Getenv("AGENTS_DASHBOARD_HOME")); v != "" {
 		return ExpandTilde(v), nil
 	}
 	base, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(base, "agent-dashboard"), nil
+	return filepath.Join(base, "agents-dashboard"), nil
 }
 
 // ExpandTilde resolves a leading ~ using the current user's home directory.

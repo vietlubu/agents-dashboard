@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/vietlubu/agent-dashboard/internal/store"
+	"github.com/vietlubu/agents-dashboard/internal/store"
 )
 
 // All returns the registered harnesses rooted at the current user's home directory.

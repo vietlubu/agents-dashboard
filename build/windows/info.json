@@ -6,9 +6,9 @@
 		"0000": {
 			"ProductVersion": "0.1.0",
 			"CompanyName": "My Company",
-			"FileDescription": "A agent-dashboard application",
+			"FileDescription": "Agents Dashboard",
 			"LegalCopyright": "© 2026, My Company",
-			"ProductName": "My Product",
+			"ProductName": "Agents Dashboard",
 			"Comments": "This is a comment"
 		}
 	}

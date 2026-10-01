@@ -1,4 +1,4 @@
-module github.com/vietlubu/agent-dashboard
+module github.com/vietlubu/agents-dashboard
 
 go 1.26.0
 

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vietlubu/agent-dashboard/internal/store"
+	"github.com/vietlubu/agents-dashboard/internal/store"
 )
 
 // Price catalog sources. Both are the sources the reference implementation uses, and both

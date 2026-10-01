@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 
-	"github.com/vietlubu/agent-dashboard/internal/store"
-	syncengine "github.com/vietlubu/agent-dashboard/internal/sync"
+	"github.com/vietlubu/agents-dashboard/internal/store"
+	syncengine "github.com/vietlubu/agents-dashboard/internal/sync"
 )
 
 // SyncService exposes the scan loop to the UI: its status, a manual trigger, a cancel, and

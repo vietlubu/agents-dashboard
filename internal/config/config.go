@@ -72,7 +72,7 @@ func Load() (*Config, error) {
 	// The name matters as much as the location: the frontend resolves day boundaries with
 	// Intl, which accepts IANA names only. time.Local.String() returns "Local", which Intl
 	// rejects, so the system zone is detected by name instead of taken from time.Local.
-	tz, loc, warning := resolveTimezone(os.Getenv("AGENT_DASHBOARD_TZ"))
+	tz, loc, warning := resolveTimezone(os.Getenv("AGENTS_DASHBOARD_TZ"))
 	if warning != "" {
 		warnings = append(warnings, warning)
 	}
@@ -80,13 +80,13 @@ func Load() (*Config, error) {
 	c.mutable = Mutable{
 		TZ:             tz,
 		Location:       loc,
-		IdleInterval:   envDuration("AGENT_DASHBOARD_IDLE_INTERVAL", DefaultIdleInterval),
-		BurstInterval:  envDuration("AGENT_DASHBOARD_BURST_INTERVAL", DefaultBurstInterval),
+		IdleInterval:   envDuration("AGENTS_DASHBOARD_IDLE_INTERVAL", DefaultIdleInterval),
+		BurstInterval:  envDuration("AGENTS_DASHBOARD_BURST_INTERVAL", DefaultBurstInterval),
 		BurstWindow:    DefaultBurstWindow,
-		Concurrency:    envInt("AGENT_DASHBOARD_CONCURRENCY", defaultConcurrency()),
-		ServerHost:     envString("AGENT_DASHBOARD_SERVER_HOST", DefaultServerHost),
-		ServerPort:     envInt("AGENT_DASHBOARD_SERVER_PORT", DefaultServerPort),
-		AutoSyncPrices: envBool("AGENT_DASHBOARD_AUTO_SYNC_PRICES", true),
+		Concurrency:    envInt("AGENTS_DASHBOARD_CONCURRENCY", defaultConcurrency()),
+		ServerHost:     envString("AGENTS_DASHBOARD_SERVER_HOST", DefaultServerHost),
+		ServerPort:     envInt("AGENTS_DASHBOARD_SERVER_PORT", DefaultServerPort),
+		AutoSyncPrices: envBool("AGENTS_DASHBOARD_AUTO_SYNC_PRICES", true),
 	}
 	if c.mutable.Concurrency < 1 {
 		c.mutable.Concurrency = 1

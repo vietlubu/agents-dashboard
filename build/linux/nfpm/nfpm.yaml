@@ -3,26 +3,26 @@
 #
 # The lines below are called `modelines`. See `:help modeline`
 
-name: "agent-dashboard"
+name: "agents-dashboard"
 arch: ${GOARCH}
 platform: "linux"
 version: "0.1.0"
 section: "default"
 priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
-description: "A agent-dashboard application"
+description: "Agents Dashboard"
 vendor: "My Company"
 homepage: "https://wails.io"
 license: "MIT"
 release: "1"
 
 contents:
-  - src: "./bin/agent-dashboard"
-    dst: "/usr/local/bin/agent-dashboard"
+  - src: "./bin/agents-dashboard"
+    dst: "/usr/local/bin/agents-dashboard"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/agent-dashboard.png"
-  - src: "./build/linux/agent-dashboard.desktop"
-    dst: "/usr/share/applications/agent-dashboard.desktop"
+    dst: "/usr/share/icons/hicolor/128x128/apps/agents-dashboard.png"
+  - src: "./build/linux/agents-dashboard.desktop"
+    dst: "/usr/share/applications/agents-dashboard.desktop"
 
 # Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:

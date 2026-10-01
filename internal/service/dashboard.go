@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	"github.com/vietlubu/agent-dashboard/internal/store"
+	"github.com/vietlubu/agents-dashboard/internal/store"
 )
 
 // DashboardService serves every aggregate the charts need. All of it is read from the

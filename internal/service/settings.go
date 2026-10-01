@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/vietlubu/agent-dashboard/internal/config"
-	"github.com/vietlubu/agent-dashboard/internal/pricing"
-	"github.com/vietlubu/agent-dashboard/internal/store"
+	"github.com/vietlubu/agents-dashboard/internal/config"
+	"github.com/vietlubu/agents-dashboard/internal/pricing"
+	"github.com/vietlubu/agents-dashboard/internal/store"
 )
 
 // SettingsService owns everything the user can change: scan roots, intervals, timezone,

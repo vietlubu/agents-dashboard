@@ -1,13 +1,13 @@
 [Desktop Entry]
 Version=1.0
-Name=My Product
-Comment=A agent-dashboard application
+Name=Agents Dashboard
+Comment=Agents Dashboard
 # The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/agent-dashboard %u
+Exec=/usr/local/bin/agents-dashboard %u
 Terminal=false
 Type=Application
-Icon=agent-dashboard
+Icon=agents-dashboard
 Categories=Utility;
-StartupWMClass=agent-dashboard
+StartupWMClass=agents-dashboard
 
  

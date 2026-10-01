@@ -1,6 +1,6 @@
 // Metadata API: harnesses, filter facets, sessions.
-import * as Meta from "@bindings/github.com/vietlubu/agent-dashboard/internal/service/metaservice";
-import type * as StoreModels from "@bindings/github.com/vietlubu/agent-dashboard/internal/store/models";
+import * as Meta from "@bindings/github.com/vietlubu/agents-dashboard/internal/service/metaservice";
+import type * as StoreModels from "@bindings/github.com/vietlubu/agents-dashboard/internal/store/models";
 
 export type HarnessInfo = StoreModels.HarnessInfo;
 export type FacetValue = StoreModels.FacetValue;

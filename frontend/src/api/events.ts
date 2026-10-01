@@ -1,6 +1,6 @@
 // Events API: listing, column set, and the client-side download of an export.
-import * as Events from "@bindings/github.com/vietlubu/agent-dashboard/internal/service/eventsservice";
-import type * as StoreModels from "@bindings/github.com/vietlubu/agent-dashboard/internal/store/models";
+import * as Events from "@bindings/github.com/vietlubu/agents-dashboard/internal/service/eventsservice";
+import type * as StoreModels from "@bindings/github.com/vietlubu/agents-dashboard/internal/store/models";
 
 export type EventRow = StoreModels.EventRow;
 export type ExportResult = StoreModels.ExportResult;

@@ -9,7 +9,7 @@ import "github.com/wailsapp/wails/v3/pkg/application"
 // only log a warning.
 func openMainWindow(app *application.App) {
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:            "Agent Dashboard",
+		Title:            "Agents Dashboard",
 		Width:            1440,
 		Height:           900,
 		MinWidth:         1024,

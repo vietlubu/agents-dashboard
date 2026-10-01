@@ -8,27 +8,27 @@
         AllowPromptForPassword="false">
     </Settings>
     <Installer
-        Path="agent-dashboard"
+        Path="agents-dashboard"
         Arguments=""
-        InstallLocation="C:\Program Files\My Company\My Product">
+        InstallLocation="C:\Program Files\My Company\Agents Dashboard">
     </Installer>
     <PackageInformation
-        PackageName="My Product"
-        PackageDisplayName="My Product"
+        PackageName="Agents Dashboard"
+        PackageDisplayName="Agents Dashboard"
         PublisherName="CN=My Company"
         PublisherDisplayName="My Company"
         Version="0.1.0.0"
-        PackageDescription="A agent-dashboard application">
+        PackageDescription="Agents Dashboard">
         <Capabilities>
             <Capability Name="runFullTrust" />
             
         </Capabilities>
         <Applications>
             <Application
-                Id="com.example.agentdashboard"
-                Description="A agent-dashboard application"
-                DisplayName="My Product"
-                ExecutableName="agent-dashboard"
+                Id="com.example.agentsdashboard"
+                Description="Agents Dashboard"
+                DisplayName="Agents Dashboard"
+                ExecutableName="agents-dashboard"
                 EntryPoint="Windows.FullTrustApplication">
                 
             </Application>
@@ -41,13 +41,13 @@
         </Dependencies>
         <Properties>
             <Framework>false</Framework>
-            <DisplayName>My Product</DisplayName>
+            <DisplayName>Agents Dashboard</DisplayName>
             <PublisherDisplayName>My Company</PublisherDisplayName>
-            <Description>A agent-dashboard application</Description>
+            <Description>Agents Dashboard</Description>
             <Logo>Assets\AppIcon.png</Logo>
         </Properties>
     </PackageInformation>
-    <SaveLocation PackagePath="agent-dashboard.msix" />
+    <SaveLocation PackagePath="agents-dashboard.msix" />
     <PackageIntegrity>
         <CertificatePath></CertificatePath>
     </PackageIntegrity>

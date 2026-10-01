@@ -27,33 +27,33 @@ import * as $models from "./models.js";
  * the work since the last committed batch is repeated.
  */
 export function Cancel(): $CancellablePromise<boolean> {
-    return $Call.ByID(812018055);
+    return $Call.ByID(1970541722);
 }
 
 /**
  * History returns the most recent scans, newest first.
  */
 export function History(limit: number): $CancellablePromise<store$0.SyncRun[] | null> {
-    return $Call.ByID(3171822715, limit);
+    return $Call.ByID(649243448, limit);
 }
 
 /**
  * LastRun returns the previous scan's summary, or a zero value before the first scan.
  */
 export function LastRun(): $CancellablePromise<sync$0.RunSummary> {
-    return $Call.ByID(2799299506);
+    return $Call.ByID(1785426469);
 }
 
 /**
  * Status reports whether a scan is running and when the next one starts.
  */
 export function Status(): $CancellablePromise<$models.SyncStatus> {
-    return $Call.ByID(2167670379);
+    return $Call.ByID(3480999138);
 }
 
 /**
  * TriggerNow starts an immediate scan. It returns false when one is already running.
  */
 export function TriggerNow(): $CancellablePromise<boolean> {
-    return $Call.ByID(3760515385);
+    return $Call.ByID(2947274884);
 }

@@ -1,4 +1,4 @@
-// Command agent-dashboard is a local usage tracker for coding agents. It reads the session
+// Command agents-dashboard is a local usage tracker for coding agents. It reads the session
 // files that Claude Code, Codex, OpenCode, Pi and omp already write, stores normalized
 // usage in its own SQLite database, and serves a dashboard from that database.
 //
@@ -15,12 +15,12 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
-	"github.com/vietlubu/agent-dashboard/internal/config"
-	"github.com/vietlubu/agent-dashboard/internal/pricing"
-	"github.com/vietlubu/agent-dashboard/internal/service"
-	"github.com/vietlubu/agent-dashboard/internal/store"
-	syncengine "github.com/vietlubu/agent-dashboard/internal/sync"
-	"github.com/vietlubu/agent-dashboard/internal/version"
+	"github.com/vietlubu/agents-dashboard/internal/config"
+	"github.com/vietlubu/agents-dashboard/internal/pricing"
+	"github.com/vietlubu/agents-dashboard/internal/service"
+	"github.com/vietlubu/agents-dashboard/internal/store"
+	syncengine "github.com/vietlubu/agents-dashboard/internal/sync"
+	"github.com/vietlubu/agents-dashboard/internal/version"
 )
 
 //go:embed all:frontend/dist
@@ -90,7 +90,7 @@ func main() {
 	appSvc := service.NewAppService(deps)
 
 	app = application.New(application.Options{
-		Name:        "agent-dashboard",
+		Name:        "agents-dashboard",
 		Description: "Local agent usage tracker",
 		Services: []application.Service{
 			application.NewService(appSvc),
@@ -155,7 +155,7 @@ func applyPersistedSettings(s *service.SettingsService) error {
 // newLogger writes structured logs to the data directory and mirrors warnings and above to
 // stderr, so a terminal launch shows what is happening while the file keeps the detail.
 func newLogger(cfg *config.Config) (*slog.Logger, func()) {
-	path := filepath.Join(cfg.Home, "agent-dashboard.log")
+	path := filepath.Join(cfg.Home, "agents-dashboard.log")
 	if fi, err := os.Stat(path); err == nil && fi.Size() > maxLogBytes {
 		_ = os.Rename(path, path+".1")
 	}

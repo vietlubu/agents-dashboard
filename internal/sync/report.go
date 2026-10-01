@@ -3,8 +3,8 @@ package sync
 import (
 	"context"
 
-	"github.com/vietlubu/agent-dashboard/internal/harness"
-	"github.com/vietlubu/agent-dashboard/internal/store"
+	"github.com/vietlubu/agents-dashboard/internal/harness"
+	"github.com/vietlubu/agents-dashboard/internal/store"
 )
 
 // Report builds the per-harness report: what each harness is, where it was looked for,

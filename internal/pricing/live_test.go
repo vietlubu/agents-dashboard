@@ -7,14 +7,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/vietlubu/agent-dashboard/internal/store"
+	"github.com/vietlubu/agents-dashboard/internal/store"
 )
 
 // TestSyncFromLiveCatalog exercises the real endpoints.
 //
 // It is opt-in because it needs network access: run it with
 //
-//	AGENT_DASHBOARD_LIVE_PRICING=1 go test ./internal/pricing/ -run LiveCatalog -v
+//	AGENTS_DASHBOARD_LIVE_PRICING=1 go test ./internal/pricing/ -run LiveCatalog -v
 //
 // The catalog's shape is not something a fixture can be trusted to keep in step with, and the
 // first version of this code silently imported nothing because the document turned out to be
@@ -24,8 +24,8 @@ func TestSyncFromLiveCatalog(t *testing.T) {
 	if testing.Short() {
 		t.Skip("network test")
 	}
-	if os.Getenv("AGENT_DASHBOARD_LIVE_PRICING") == "" {
-		t.Skip("set AGENT_DASHBOARD_LIVE_PRICING=1 to run against the live price catalogs")
+	if os.Getenv("AGENTS_DASHBOARD_LIVE_PRICING") == "" {
+		t.Skip("set AGENTS_DASHBOARD_LIVE_PRICING=1 to run against the live price catalogs")
 	}
 
 	db, err := store.Open(filepath.Join(t.TempDir(), "live.db"))

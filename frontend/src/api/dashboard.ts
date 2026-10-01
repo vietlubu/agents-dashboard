@@ -7,8 +7,8 @@
 // 2. Null normalisation. Go's nil slice serialises as null, so every list-returning call is
 //    normalised to an empty array. That contract is why those few wrappers exist: without it
 //    each caller would have to repeat the `?? []`.
-import * as Dashboard from "@bindings/github.com/vietlubu/agent-dashboard/internal/service/dashboardservice";
-import type * as StoreModels from "@bindings/github.com/vietlubu/agent-dashboard/internal/store/models";
+import * as Dashboard from "@bindings/github.com/vietlubu/agents-dashboard/internal/service/dashboardservice";
+import type * as StoreModels from "@bindings/github.com/vietlubu/agents-dashboard/internal/store/models";
 
 export type Totals = StoreModels.Totals;
 export type Comparison = StoreModels.Comparison;

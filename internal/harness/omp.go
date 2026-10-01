@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/vietlubu/agent-dashboard/internal/config"
+	"github.com/vietlubu/agents-dashboard/internal/config"
 )
 
 const ompParserVersion = 1

@@ -7,13 +7,13 @@ import type { Events } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import type * as service$0 from "../../../../vietlubu/agent-dashboard/internal/service/models.js";
+import type * as service$0 from "../../../../vietlubu/agents-dashboard/internal/service/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import type * as store$0 from "../../../../vietlubu/agent-dashboard/internal/store/models.js";
+import type * as store$0 from "../../../../vietlubu/agents-dashboard/internal/store/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import type * as sync$0 from "../../../../vietlubu/agent-dashboard/internal/sync/models.js";
+import type * as sync$0 from "../../../../vietlubu/agents-dashboard/internal/sync/models.js";
 
 declare module "@wailsio/runtime" {
     namespace Events {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vietlubu/agent-dashboard/internal/store"
+	"github.com/vietlubu/agents-dashboard/internal/store"
 )
 
 // exportRowCap bounds one export. An unbounded export of a multi-year range would build a
@@ -63,7 +63,7 @@ func (s *EventsService) Export(q store.RangeQuery, format string) (store.ExportR
 		if err != nil {
 			return store.ExportResult{}, err
 		}
-		result.Filename = fmt.Sprintf("agent-dashboard-events-%s.json", stamp)
+		result.Filename = fmt.Sprintf("agents-dashboard-events-%s.json", stamp)
 		result.MimeType = "application/json"
 		result.Content = string(content)
 	case "csv", "":
@@ -81,7 +81,7 @@ func (s *EventsService) Export(q store.RangeQuery, format string) (store.ExportR
 		if err := w.Error(); err != nil {
 			return store.ExportResult{}, err
 		}
-		result.Filename = fmt.Sprintf("agent-dashboard-events-%s.csv", stamp)
+		result.Filename = fmt.Sprintf("agents-dashboard-events-%s.csv", stamp)
 		result.MimeType = "text/csv"
 		result.Content = sb.String()
 	default:

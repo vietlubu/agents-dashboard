@@ -15,7 +15,7 @@ const items = [
   <aside class="sidebar">
     <div class="brand">
       <span class="brand-dot" />
-      <span>agent-dashboard</span>
+      <span>Agents Dashboard</span>
     </div>
     <nav>
       <RouterLink v-for="item in items" :key="item.to" :to="item.to" class="nav-link">

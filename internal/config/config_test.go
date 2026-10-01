@@ -7,12 +7,12 @@ import (
 )
 
 func TestLoadDefaultsAndEnvOverrides(t *testing.T) {
-	t.Setenv("AGENT_DASHBOARD_HOME", filepath.Join(t.TempDir(), "data"))
-	t.Setenv("AGENT_DASHBOARD_TZ", "Asia/Ho_Chi_Minh")
-	t.Setenv("AGENT_DASHBOARD_IDLE_INTERVAL", "90s")
-	t.Setenv("AGENT_DASHBOARD_CONCURRENCY", "3")
-	t.Setenv("AGENT_DASHBOARD_SERVER_PORT", "9999")
-	t.Setenv("AGENT_DASHBOARD_AUTO_SYNC_PRICES", "false")
+	t.Setenv("AGENTS_DASHBOARD_HOME", filepath.Join(t.TempDir(), "data"))
+	t.Setenv("AGENTS_DASHBOARD_TZ", "Asia/Ho_Chi_Minh")
+	t.Setenv("AGENTS_DASHBOARD_IDLE_INTERVAL", "90s")
+	t.Setenv("AGENTS_DASHBOARD_CONCURRENCY", "3")
+	t.Setenv("AGENTS_DASHBOARD_SERVER_PORT", "9999")
+	t.Setenv("AGENTS_DASHBOARD_AUTO_SYNC_PRICES", "false")
 
 	c, err := Load()
 	if err != nil {
@@ -46,8 +46,8 @@ func TestLoadDefaultsAndEnvOverrides(t *testing.T) {
 }
 
 func TestLoadFallsBackOnUnknownTimezone(t *testing.T) {
-	t.Setenv("AGENT_DASHBOARD_HOME", t.TempDir())
-	t.Setenv("AGENT_DASHBOARD_TZ", "Not/AZone")
+	t.Setenv("AGENTS_DASHBOARD_HOME", t.TempDir())
+	t.Setenv("AGENTS_DASHBOARD_TZ", "Not/AZone")
 
 	c, err := Load()
 	if err != nil {
@@ -68,8 +68,8 @@ func TestLoadFallsBackOnUnknownTimezone(t *testing.T) {
 }
 
 func TestLoadRejectsOutOfRangePort(t *testing.T) {
-	t.Setenv("AGENT_DASHBOARD_HOME", t.TempDir())
-	t.Setenv("AGENT_DASHBOARD_SERVER_PORT", "70000")
+	t.Setenv("AGENTS_DASHBOARD_HOME", t.TempDir())
+	t.Setenv("AGENTS_DASHBOARD_SERVER_PORT", "70000")
 
 	c, err := Load()
 	if err != nil {
@@ -85,7 +85,7 @@ func TestLoadRejectsOutOfRangePort(t *testing.T) {
 
 // Apply must actually take effect because the scheduler reads intervals on every loop.
 func TestApplyOverridesTakeEffect(t *testing.T) {
-	t.Setenv("AGENT_DASHBOARD_HOME", t.TempDir())
+	t.Setenv("AGENTS_DASHBOARD_HOME", t.TempDir())
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -111,7 +111,7 @@ func TestApplyOverridesTakeEffect(t *testing.T) {
 // The default zone must be a name Intl accepts; time.Local.String() returns "Local", which
 // the frontend cannot use to compute day boundaries.
 func TestDefaultTimezoneIsAnIANAName(t *testing.T) {
-	t.Setenv("AGENT_DASHBOARD_HOME", t.TempDir())
+	t.Setenv("AGENTS_DASHBOARD_HOME", t.TempDir())
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)

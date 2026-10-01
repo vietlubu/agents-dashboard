@@ -1,7 +1,7 @@
 // Settings API: general settings, scan roots, prices and price rules, and the data reset.
-import * as Settings from "@bindings/github.com/vietlubu/agent-dashboard/internal/service/settingsservice";
-import type * as StoreModels from "@bindings/github.com/vietlubu/agent-dashboard/internal/store/models";
-import type * as PricingModels from "@bindings/github.com/vietlubu/agent-dashboard/internal/pricing/models";
+import * as Settings from "@bindings/github.com/vietlubu/agents-dashboard/internal/service/settingsservice";
+import type * as StoreModels from "@bindings/github.com/vietlubu/agents-dashboard/internal/store/models";
+import type * as PricingModels from "@bindings/github.com/vietlubu/agents-dashboard/internal/pricing/models";
 
 export type SettingsModel = StoreModels.Settings;
 export type SettingsPatch = StoreModels.SettingsPatch;

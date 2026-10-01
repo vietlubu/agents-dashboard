@@ -8,17 +8,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vietlubu/agent-dashboard/internal/config"
-	"github.com/vietlubu/agent-dashboard/internal/harness"
-	"github.com/vietlubu/agent-dashboard/internal/pricing"
-	"github.com/vietlubu/agent-dashboard/internal/store"
+	"github.com/vietlubu/agents-dashboard/internal/config"
+	"github.com/vietlubu/agents-dashboard/internal/harness"
+	"github.com/vietlubu/agents-dashboard/internal/pricing"
+	"github.com/vietlubu/agents-dashboard/internal/store"
 )
 
 func testEngine(t *testing.T) (*Engine, *store.DB, *pricing.Catalog, string) {
 	t.Helper()
 	home := t.TempDir()
-	t.Setenv("AGENT_DASHBOARD_HOME", home)
-	t.Setenv("AGENT_DASHBOARD_TZ", "UTC")
+	t.Setenv("AGENTS_DASHBOARD_HOME", home)
+	t.Setenv("AGENTS_DASHBOARD_TZ", "UTC")
 
 	cfg, err := config.Load()
 	if err != nil {

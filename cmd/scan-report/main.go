@@ -21,10 +21,10 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/vietlubu/agent-dashboard/internal/config"
-	"github.com/vietlubu/agent-dashboard/internal/pricing"
-	"github.com/vietlubu/agent-dashboard/internal/store"
-	syncengine "github.com/vietlubu/agent-dashboard/internal/sync"
+	"github.com/vietlubu/agents-dashboard/internal/config"
+	"github.com/vietlubu/agents-dashboard/internal/pricing"
+	"github.com/vietlubu/agents-dashboard/internal/store"
+	syncengine "github.com/vietlubu/agents-dashboard/internal/sync"
 )
 
 func main() {
@@ -38,7 +38,7 @@ func main() {
 	flag.Parse()
 
 	if *home != "" {
-		_ = os.Setenv("AGENT_DASHBOARD_HOME", *home)
+		_ = os.Setenv("AGENTS_DASHBOARD_HOME", *home)
 	}
 
 	cfg, err := config.Load()
@@ -49,7 +49,7 @@ func main() {
 	path := *dbPath
 	cleanup := func() {}
 	if path == "" {
-		dir, err := os.MkdirTemp("", "agent-dashboard-scan")
+		dir, err := os.MkdirTemp("", "agents-dashboard-scan")
 		if err != nil {
 			fatal(err)
 		}

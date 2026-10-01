@@ -11,11 +11,11 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
-	"github.com/vietlubu/agent-dashboard/internal/config"
-	"github.com/vietlubu/agent-dashboard/internal/pricing"
-	"github.com/vietlubu/agent-dashboard/internal/store"
-	syncengine "github.com/vietlubu/agent-dashboard/internal/sync"
-	"github.com/vietlubu/agent-dashboard/internal/version"
+	"github.com/vietlubu/agents-dashboard/internal/config"
+	"github.com/vietlubu/agents-dashboard/internal/pricing"
+	"github.com/vietlubu/agents-dashboard/internal/store"
+	syncengine "github.com/vietlubu/agents-dashboard/internal/sync"
+	"github.com/vietlubu/agents-dashboard/internal/version"
 )
 
 // Event names emitted to the frontend. They are registered in main so the generated
