@@ -183,6 +183,32 @@ test suite; `vue-tsc` is its only automated check. Go tests use the stdlib `test
 with temp-dir fixtures. `internal/pricing/live_test.go` is the only network test and is
 skipped under `-short` unless `AGENTS_DASHBOARD_LIVE_PRICING` is set.
 
+### Release contract
+
+Release tags and binary versions use `vYY.MM.DD.NNN` (Vietnam date,
+`Asia/Ho_Chi_Minh`; daily serial `001..999`). `dev` is not a release version.
+Reruns reuse the tag reserved for their source commit; failed builds may leave gaps.
+
+`scripts/release.mjs` uses only Node's standard library. Its commands are `reserve`,
+`metadata <tag> <output-dir>`, `checksums <asset-dir>` and `publish <asset-dir>`;
+run their fixture checks with `node --test scripts/release.test.mjs`.
+Metadata is copied from `build/` templates rather than modifying them.
+
+Each release contains desktop and server payloads for darwin amd64/arm64,
+windows amd64 and linux amd64/arm64, plus a Windows per-user installer and
+`SHA256SUMS`. Basenames are stable: `agents-dashboard-<os>-<arch>` and
+`agents-dashboard-server-<os>-<arch>` (macOS desktop ZIP, Windows desktop EXE,
+Windows server ZIP, other payloads tar.gz). The installer is
+`agents-dashboard-windows-amd64-installer.exe`. Archives contain one root:
+`agents-dashboard.app`, `agents-dashboard`, or `agents-dashboard-server[.exe]`.
+No mobile, Docker or Linux package-manager artifacts are published.
+
+Publication verifies the complete asset manifest and hashes in a private draft
+before making it public. Existing public releases are never overwritten;
+only a draft bearing the exact source-SHA ownership marker may be recreated.
+Commit ancestry prevents an older or diverged build from replacing `latest`.
+
+
 ## Notes
 
 - Costs are estimates unless the harness reported one. Events whose model has no price carry
