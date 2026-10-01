@@ -5,7 +5,7 @@ import ChartBox from "@/components/charts/ChartBox.vue";
 import Card from "@/components/ui/Card.vue";
 import type { Granularity, GranularityChoice, SeriesPoint } from "@/api/dashboard";
 import { baseChartOptions, resolveColor, seriesColor } from "@/lib/chart";
-import { formatBucket, formatPercent, formatTokens, formatUSD } from "@/lib/format";
+import { formatBucket, formatInt, formatPercent, formatTokens, formatUSD } from "@/lib/format";
 import { useSettingsStore } from "@/stores/settings";
 
 /**
@@ -90,11 +90,26 @@ const config = computed(() => {
       plugins: {
         legend: { display: false },
         tooltip: {
+          displayColors: false,
           callbacks: {
             label: (ctx: { dataIndex: number }) => {
               const point = props.points.find((p) => p.key === labels.value[ctx.dataIndex]);
               if (!point) return [];
+              const selectedMetric = metric.value;
+              const valueLabel =
+                selectedMetric === "costUsd"
+                  ? t("metrics.cost")
+                  : selectedMetric === "events"
+                    ? t("metrics.events")
+                    : `${t("common.total")} ${t("metrics.tokens")}`;
+              const value =
+                selectedMetric === "costUsd"
+                  ? formatUSD(point.costUsd)
+                  : selectedMetric === "events"
+                    ? formatInt(point.events)
+                    : formatTokens(point.total);
               return [
+                `${valueLabel}: ${value}`,
                 `${t("metrics.input")}: ${formatTokens(point.input)}`,
                 `${t("metrics.cacheRead")}: ${formatTokens(point.cacheRead)}`,
                 `${t("metrics.cacheRate")}: ${formatPercent(point.cacheRead, point.input + point.cacheRead)}`,

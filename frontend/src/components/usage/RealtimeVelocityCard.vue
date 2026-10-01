@@ -36,11 +36,13 @@ const config = computed(() => {
       plugins: {
         legend: { display: false },
         tooltip: {
+          displayColors: false,
           callbacks: {
             label: (ctx: { dataIndex: number }) => {
               const bucket = props.buckets[ctx.dataIndex];
               if (!bucket) return [];
               return [
+                `${t("common.total")} ${t("metrics.tokens")}: ${formatTokens(bucket.total)}`,
                 `${t("metrics.input")}: ${formatTokens(bucket.input)}`,
                 `${t("metrics.cacheRead")}: ${formatTokens(bucket.cacheRead)}`,
                 `${t("metrics.cacheRate")}: ${formatPercent(bucket.cacheRead, bucket.input + bucket.cacheRead)}`,
