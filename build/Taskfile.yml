@@ -188,7 +188,15 @@ tasks:
     generates:
       - frontend/bindings/**/*
     cmds:
+      - >-
+        node -e 'const fs=require("node:fs");fs.mkdirSync("frontend/dist",{recursive:true});if(!fs.existsSync("frontend/dist/.gitkeep"))fs.writeFileSync("frontend/dist/.gitkeep","");'
       - wails3 generate bindings -f '{{.BUILD_FLAGS}}' -clean=true{{if eq .OBFUSCATED "true"}} -obfuscated{{end}} -ts -i ./...
+
+  release:metadata:
+    summary: Copies version-stamped release metadata without changing templates
+    run: once
+    cmds:
+      - node scripts/release.mjs metadata "{{.VERSION}}" "{{.BIN_DIR}}/release-metadata"
 
   generate:icons:
     summary: Generates Windows `.ico` and Mac `.icns` from an image; on macOS, `-iconcomposerinput appicon.icon -macassetdir darwin` also produces `Assets.car` from a `.icon` file (skipped on other platforms).
@@ -262,7 +270,7 @@ tasks:
     cmds:
       - '{{if eq .OBFUSCATED "true"}}garble {{.GARBLE_ARGS}} build{{else}}go build{{end}} {{.BUILD_FLAGS}} -o "{{.BIN_DIR}}/{{.APP_NAME}}-server{{exeExt}}"'
     vars:
-      BUILD_FLAGS: '-tags server{{if eq .DEV "true"}}{{if eq .OBFUSCATED "true"}},wails_obfuscated{{end}}{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -buildvcs=false -gcflags=all="-l"{{else}},production{{if eq .OBFUSCATED "true"}},wails_obfuscated{{end}}{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -trimpath -buildvcs=false -ldflags="-w -s"{{end}}'
+      BUILD_FLAGS: '-tags server{{if eq .DEV "true"}}{{if eq .OBFUSCATED "true"}},wails_obfuscated{{end}}{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -buildvcs=false -gcflags=all="-l" -ldflags="-X github.com/vietlubu/agents-dashboard/internal/version.Version={{.VERSION}}"{{else}},production{{if eq .OBFUSCATED "true"}},wails_obfuscated{{end}}{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -trimpath -buildvcs=false -ldflags="-w -s -X github.com/vietlubu/agents-dashboard/internal/version.Version={{.VERSION}}"{{end}}'
 
   run:server:
     summary: Builds and runs a development server (DEV=true)

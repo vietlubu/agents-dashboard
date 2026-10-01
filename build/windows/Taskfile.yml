@@ -57,7 +57,7 @@ tasks:
       - cmd: rm -f *.syso
         platforms: [linux, darwin]
     vars:
-      BUILD_FLAGS: '{{if eq .DEV "true"}}{{if or .EXTRA_TAGS (eq .OBFUSCATED "true")}}-tags {{if eq .OBFUSCATED "true"}}wails_obfuscated{{if .EXTRA_TAGS}},{{end}}{{end}}{{.EXTRA_TAGS}} {{end}}-buildvcs=false -gcflags=all="-l"{{else}}-tags production{{if eq .OBFUSCATED "true"}},wails_obfuscated{{end}}{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui"{{end}}'
+      BUILD_FLAGS: '{{if eq .DEV "true"}}{{if or .EXTRA_TAGS (eq .OBFUSCATED "true")}}-tags {{if eq .OBFUSCATED "true"}}wails_obfuscated{{if .EXTRA_TAGS}},{{end}}{{end}}{{.EXTRA_TAGS}} {{end}}-buildvcs=false -gcflags=all="-l" -ldflags="-X github.com/vietlubu/agents-dashboard/internal/version.Version={{.VERSION}}"{{else}}-tags production{{if eq .OBFUSCATED "true"}},wails_obfuscated{{end}}{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}} -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui -X github.com/vietlubu/agents-dashboard/internal/version.Version={{.VERSION}}"{{end}}'
     env:
       GOOS: windows
       CGO_ENABLED: '{{.CGO_ENABLED | default "0"}}'
@@ -107,10 +107,14 @@ tasks:
   generate:syso:
     summary: Generates Windows `.syso` file
     dir: build
+    deps:
+      - task: common:release:metadata
     cmds:
-      - wails3 generate syso -arch {{.ARCH}} -icon windows/icon.ico -manifest windows/wails.exe.manifest -info windows/info.json -out ../wails_windows_{{.ARCH}}.syso
+      - wails3 generate syso -arch {{.ARCH}} -icon windows/icon.ico -manifest "{{.MANIFEST}}" -info "{{.INFO}}" -out ../wails_windows_{{.ARCH}}.syso
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
+      MANIFEST: '{{if eq .VERSION "dev"}}{{.ROOT_DIR}}/build/windows/wails.exe.manifest{{else}}{{.ROOT_DIR}}/{{.BIN_DIR}}/release-metadata/windows/wails.exe.manifest{{end}}'
+      INFO: '{{if eq .VERSION "dev"}}{{.ROOT_DIR}}/build/windows/info.json{{else}}{{.ROOT_DIR}}/{{.BIN_DIR}}/release-metadata/windows/info.json{{end}}'
 
   create:nsis:installer:
     summary: Creates an NSIS installer
@@ -125,14 +129,15 @@ tasks:
       - wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}/build/windows/nsis"
       - |
         {{if eq OS "windows"}}
-        makensis {{if eq .INSTALL_SCOPE "user"}}-DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user {{end}}-DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" project.nsi
+        makensis {{if ne .VERSION "dev"}}-DINFO_PRODUCTVERSION={{.VERSION}} -DINFO_NUMERICVERSION={{.NUMERIC_VERSION}} {{end}}{{if eq .INSTALL_SCOPE "user"}}-DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user {{end}}-DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" project.nsi
         {{else}}
-        makensis {{if eq .INSTALL_SCOPE "user"}}-DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user {{end}}-DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" project.nsi
+        makensis {{if ne .VERSION "dev"}}-DINFO_PRODUCTVERSION={{.VERSION}} -DINFO_NUMERICVERSION={{.NUMERIC_VERSION}} {{end}}{{if eq .INSTALL_SCOPE "user"}}-DWAILS_INSTALL_SCOPE=user -DREQUEST_EXECUTION_LEVEL=user {{end}}-DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" project.nsi
         {{end}}
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
       ARG_FLAG: '{{if eq .ARCH "amd64"}}AMD64{{else}}ARM64{{end}}'
       INSTALL_SCOPE: '{{.INSTALL_SCOPE | default "machine"}}'
+      NUMERIC_VERSION: '{{if ne .VERSION "dev"}}{{$v := splitList "." (trimPrefix "v" .VERSION)}}{{index $v 0 | atoi}}.{{index $v 1 | atoi}}.{{index $v 2 | atoi}}.{{index $v 3 | atoi}}{{end}}'
 
   create:msix:package:
     summary: Creates an MSIX package

@@ -77,6 +77,21 @@ task build:server    # headless server binary -> bin/agents-dashboard-server
 task run:server      # build and run the server
 ```
 
+Release builds pass the full tag through the existing tasks:
+
+```bash
+wails3 task darwin:package VERSION=v26.10.01.001
+wails3 task windows:package ARCH=amd64 INSTALL_SCOPE=user VERSION=v26.10.01.001
+wails3 task linux:build ARCH=arm64 VERSION=v26.10.01.001
+wails3 task build:server VERSION=v26.10.01.001
+```
+
+`VERSION` defaults to `dev`; stamping does not strip development builds.
+Binding generation bootstraps the ignored `frontend/dist` directory before
+loading Go packages, then Vite replaces it with the real frontend. macOS and
+Windows release metadata copies live under `bin/release-metadata`; committed
+templates retain their development values.
+
 Cross-compilation uses the `GOOS` variable (dev mode is desktop-only):
 
 ```bash
