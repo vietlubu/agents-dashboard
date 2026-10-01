@@ -235,6 +235,10 @@ queue waiting order is not necessarily commit order. Rerunning a failed build
 reuses its reserved tag and replaces only that run's temporary Actions artifact;
 an already complete public release is left untouched.
 
+After pushing a release-script fix to `main`, use the new push run or start a
+new manual run on `main`. Workflow reruns keep their original checkout SHA,
+so rerunning the old failed job does not pick up that fix.
+
 Native jobs verify binary architecture, macOS signing/plist versions and Windows
 VERSIONINFO. `scripts/smoke-server.mjs <binary> <version> [port]` launches the actual
 server with isolated home/data, checks `/health` and the embedded frontend, and
@@ -266,6 +270,9 @@ No mobile, Docker or Linux package-manager artifacts are published.
 Publication verifies the complete asset manifest and hashes in a private draft
 before making it public. Existing public releases are never overwritten;
 only a draft bearing the exact source-SHA ownership marker may be recreated.
+Draft lookup uses the authenticated, paginated releases list when GitHub's
+by-tag endpoint returns 404; that endpoint does not expose draft releases.
+A draft is matched by its exact tag, and ambiguous matches fail without mutation.
 Commit ancestry prevents an older or diverged build from replacing `latest`.
 
 Desktop update payloads are selected by exact OS/architecture name, never by a

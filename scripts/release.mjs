@@ -122,7 +122,12 @@ function apiClient({ repository, token, fetch, baseURL }) {
     return commit(data?.object);
   }
   async function release(tag) {
-    return (await request(`releases/tags/${encodeURIComponent(tag)}`, { allow404: true })).data;
+    const { data } = await request(`releases/tags/${encodeURIComponent(tag)}`, { allow404: true });
+    if (data) return data;
+    // GitHub's by-tag endpoint returns 404 for drafts, even when authenticated.
+    const matches = (await list('releases?per_page=100')).filter((release) => release.tag_name === tag);
+    if (matches.length > 1) throw new Error(`Multiple releases match reserved tag ${tag}`);
+    return matches[0] ?? null;
   }
   async function assets(release) {
     return list(`releases/${release.id}/assets?per_page=100`);

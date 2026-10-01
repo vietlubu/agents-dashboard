@@ -134,9 +134,14 @@ async function githubFixture(t, options = {}) {
         const release = releases.get(state.latestTag);
         return send(release ? 200 : 404, release ? publicRelease(release) : { message: 'Not Found' });
       }
+      if (req.method === 'GET' && endpoint === '/releases') {
+        if (options.releaseListStatus) return send(options.releaseListStatus, { message: 'Release list unavailable' });
+        return send(200, page([...releases.values()].map(publicRelease)));
+      }
       if (req.method === 'GET' && endpoint.startsWith('/releases/tags/')) {
         const release = releases.get(decodeURIComponent(endpoint.slice('/releases/tags/'.length)));
-        return send(release ? 200 : 404, release ? publicRelease(release) : { message: 'Not Found' });
+        const published = release && !release.draft;
+        return send(published ? 200 : 404, published ? publicRelease(release) : { message: 'Not Found' });
       }
       const assetMatch = endpoint.match(/^\/releases\/assets\/(\d+)$/) ?? url.pathname.match(/^\/download\/(\d+)$/);
       if (req.method === 'GET' && assetMatch) {
@@ -480,8 +485,12 @@ test('new release stays draft through byte verification and then becomes latest 
 });
 
 test('incomplete owned draft is replaced wholly by the current build, preserving its tag', async (t) => {
-  const fixture = await githubFixture(t);
+  const fixture = await githubFixture(t, { pageSize: 1 });
   fixture.addTag(TAG);
+  const unrelated = [
+    fixture.addRelease({ tag: `${TAG}-other`, draft: true, body: 'User-managed draft', names: [] }),
+    fixture.addRelease({ tag: 'v26.09.30.001', draft: true, body: marker(OTHER_SHA), names: [] }),
+  ];
   const stale = fixture.addRelease({ draft: true, body: `${marker()}\nhttps://github.com/${REPOSITORY}/actions/runs/999`, names: [PAYLOADS[0], 'SHA256SUMS'] });
   const directory = await assetDirectory(t);
   await fixture.publish(directory);
@@ -492,6 +501,31 @@ test('incomplete owned draft is replaced wholly by the current build, preserving
   assert.equal(rebuilt.draft, false);
   assert.ok(rebuilt.body.includes('/actions/runs/1234'));
   for (const asset of rebuilt.assets) assert.deepEqual(asset.bytes, await readFile(join(directory, asset.name)));
+  for (const release of unrelated) assert.equal(fixture.releases.get(release.tag_name), release);
+  assert.ok(fixture.requests.some((request) => request.path === `/repos/${REPOSITORY}/releases` && request.search.includes('page=3')));
+});
+
+test('draft lookup API errors cannot create or replace a release', async (t) => {
+  const fixture = await githubFixture(t, { releaseListStatus: 403 });
+  fixture.addTag(TAG);
+  const draft = fixture.addRelease({ draft: true, names: [] });
+  await assert.rejects(fixture.publish(await assetDirectory(t)), /HTTP 403/);
+  assert.equal(fixture.releases.get(TAG), draft);
+  assert.deepEqual(fixture.ghCalls, []);
+  assert.deepEqual(publishingRequests(fixture), []);
+});
+
+test('multiple matching drafts cannot select an arbitrary release for deletion', async (t) => {
+  const fixture = await githubFixture(t, { pageSize: 1 });
+  fixture.addTag(TAG);
+  const first = fixture.addRelease({ draft: true, names: [] });
+  const second = fixture.addRelease({ tag: `${TAG}-duplicate`, draft: true, names: [] });
+  second.tag_name = TAG;
+  await assert.rejects(fixture.publish(await assetDirectory(t)), /Multiple releases match reserved tag/);
+  assert.equal(first.draft, true);
+  assert.equal(second.draft, true);
+  assert.deepEqual(fixture.ghCalls, []);
+  assert.deepEqual(publishingRequests(fixture), []);
 });
 
 for (const body of ['A user-managed draft', marker(OTHER_SHA), `<!-- agents-dashboard-release sha=${SHA} extra=yes -->`, `${marker()}\n${marker()}`]) {
