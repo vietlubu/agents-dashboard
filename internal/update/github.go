@@ -3,8 +3,11 @@ package update
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/vietlubu/agents-dashboard/internal/version"
 	"github.com/wailsapp/wails/v3/pkg/updater"
@@ -33,14 +36,38 @@ type githubProvider struct {
 	*github.Provider
 }
 
+type releaseStatusKey struct{}
+
+// Wails treats empty tags as no-update. Observe only the API status so malformed
+// HTTP 200 metadata cannot masquerade as 404; the delegate still reads the body.
+type releaseStatusTransport struct{ next http.RoundTripper }
+
+func (t releaseStatusTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	response, err := t.next.RoundTrip(req)
+	if status, ok := req.Context().Value(releaseStatusKey{}).(*int); ok && response != nil &&
+		strings.HasSuffix(req.URL.Path, "/repos/vietlubu/agents-dashboard/releases/latest") {
+		*status = response.StatusCode
+	}
+	return response, err
+}
+
 // NewGitHubProvider uses Wails for GitHub requests and downloads, while enforcing
 // the application's CalVer and exact desktop asset/checksum contracts.
 func NewGitHubProvider(client *http.Client, baseURL string) (updater.Provider, error) {
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+	wrapped := *client
+	transport := wrapped.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	wrapped.Transport = releaseStatusTransport{next: transport}
 	delegate, err := github.New(github.Config{
 		Repository:    "vietlubu/agents-dashboard",
 		ChecksumAsset: "SHA256SUMS",
 		Prerelease:    false,
-		HTTPClient:    client,
+		HTTPClient:    &wrapped,
 		BaseURL:       baseURL,
 		AssetMatcher: func(req updater.CheckRequest, assets []github.ReleaseAsset) int {
 			name, err := DesktopAsset(req.Platform, req.Arch)
@@ -72,9 +99,17 @@ func (p *githubProvider) Check(ctx context.Context, req updater.CheckRequest) (*
 	// Wails treats a nonempty release with an empty current version as newer;
 	// the real comparison below must use CalVer rather than Wails' SemVer.
 	delegateReq.CurrentVersion = ""
+	var status int
+	ctx = context.WithValue(ctx, releaseStatusKey{}, &status)
 	release, err := p.Provider.Check(ctx, delegateReq)
-	if err != nil || release == nil {
+	if err != nil {
 		return nil, err
+	}
+	if release == nil {
+		if status == http.StatusOK {
+			return nil, errors.New("read github latest release: missing or malformed release metadata")
+		}
+		return nil, nil
 	}
 	// Wails strips both v and V. Validate the original tag as well so that
 	// normalization cannot turn a malformed tag into a valid release version.

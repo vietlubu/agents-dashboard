@@ -247,6 +247,8 @@ Commit ancestry prevents an older or diverged build from replacing `latest`.
 Desktop update payloads are selected by exact OS/architecture name, never by a
 substring that could match a server or installer. A newer valid CalVer release
 must supply a SHA-256 checksum before it can be offered for installation.
+Missing or malformed release metadata is an error, not an up-to-date result;
+GitHub's no-release 404 is the no-update case.
 Replacement requires a writable installation; macOS must run from an extracted
 `.app` outside a disk image or App Translocation. Linux system/package paths
 (`/usr`, `/bin`, `/sbin`, `/opt`) require manual updates even when run as root.

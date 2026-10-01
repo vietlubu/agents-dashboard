@@ -172,6 +172,8 @@ func TestGitHubProviderRejectsUnsafeReleases(t *testing.T) {
 		{"invalid tag serial", func(f *githubFixture, r *updater.CheckRequest) { f.tag = "v26.10.01.000" }, false},
 		{"invalid tag grammar", func(f *githubFixture, r *updater.CheckRequest) { f.tag = "v1.2.3" }, false},
 		{"uppercase tag prefix", func(f *githubFixture, r *updater.CheckRequest) { f.tag = "V26.10.01.002" }, false},
+		{"empty tag", func(f *githubFixture, r *updater.CheckRequest) { f.tag = "" }, false},
+		{"bare tag prefix", func(f *githubFixture, r *updater.CheckRequest) { f.tag = "v" }, false},
 		{"rate limit", func(f *githubFixture, r *updater.CheckRequest) { f.apiStatus = http.StatusForbidden }, false},
 		{"server failure", func(f *githubFixture, r *updater.CheckRequest) { f.apiStatus = http.StatusInternalServerError }, false},
 		{"sidecar HTTP failure", func(f *githubFixture, r *updater.CheckRequest) { f.checksumStatus = http.StatusNotFound }, false},
