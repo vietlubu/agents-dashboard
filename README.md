@@ -223,7 +223,7 @@ skipped under `-short` unless `AGENTS_DASHBOARD_LIVE_PRICING` is set.
 
 `.github/workflows/release.yml` runs release-script fixtures, the real frontend
 build, desktop/server Go checks and an isolated server smoke for PRs to `main`.
-Pushes to `main`, and manual runs on `main`, then reserve a tag, build five native
+Pushes to `main`, and manual runs on `main`, then reserve a tag, build four native
 desktop/server targets and publish only after every native smoke passes. Manual
 runs on other branches run checks only. No PAT, signing secret, tag-triggered
 workflow or committed version file is required; only reserve/publish jobs get
@@ -253,9 +253,10 @@ Reruns reuse the tag reserved for their source commit; failed builds may leave g
 run their fixture checks with `node --test scripts/release.test.mjs`.
 Metadata is copied from `build/` templates rather than modifying them.
 
-Each release contains desktop and server payloads for darwin amd64/arm64,
-windows amd64 and linux amd64/arm64, plus a Windows per-user installer and
-`SHA256SUMS`. Basenames are stable: `agents-dashboard-<os>-<arch>` and
+Each release contains desktop and server payloads for darwin arm64,
+windows amd64 and linux amd64/arm64, plus a Windows per-user installer:
+nine payloads and `SHA256SUMS`. macOS Intel builds are not published and do not
+support automatic updates. Basenames are stable: `agents-dashboard-<os>-<arch>` and
 `agents-dashboard-server-<os>-<arch>` (macOS desktop ZIP, Windows desktop EXE,
 Windows server ZIP, other payloads tar.gz). The installer is
 `agents-dashboard-windows-amd64-installer.exe`. Archives contain one root:

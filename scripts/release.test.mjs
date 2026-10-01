@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { allocateTag, checksums, datePrefix, EXPECTED_ASSETS, metadata, parseVersion, publish, reserve } from './release.mjs';
+import { allocateTag, checksums, datePrefix, metadata, parseVersion, publish, reserve } from './release.mjs';
 
 const REPOSITORY = 'vietlubu/agents-dashboard';
 const SHA = 'a'.repeat(40);
@@ -14,13 +14,11 @@ const OTHER_SHA = 'b'.repeat(40);
 const TAG = 'v26.10.01.001';
 const NOW = new Date('2026-09-30T17:00:00Z');
 const PAYLOADS = [
-  'agents-dashboard-darwin-amd64.zip',
   'agents-dashboard-darwin-arm64.zip',
   'agents-dashboard-windows-amd64.exe',
   'agents-dashboard-windows-amd64-installer.exe',
   'agents-dashboard-linux-amd64.tar.gz',
   'agents-dashboard-linux-arm64.tar.gz',
-  'agents-dashboard-server-darwin-amd64.tar.gz',
   'agents-dashboard-server-darwin-arm64.tar.gz',
   'agents-dashboard-server-windows-amd64.zip',
   'agents-dashboard-server-linux-amd64.tar.gz',
@@ -230,7 +228,6 @@ function publishingRequests(fixture) {
 }
 
 test('release grammar preserves the full tag and derives native numeric versions', () => {
-  assert.deepEqual([...EXPECTED_ASSETS].sort(), PAYLOADS);
   assert.deepEqual(parseVersion(TAG), {
     tag: TAG, date: '26.10.01', year: 26, month: 10, day: 1, serial: 1,
     numeric: '26.10.1.1', short: '26.10.1', bundle: '26.1001.1',

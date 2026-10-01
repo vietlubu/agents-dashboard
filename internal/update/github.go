@@ -17,8 +17,6 @@ import (
 // DesktopAsset returns the exact updater payload for a supported desktop target.
 func DesktopAsset(platform, arch string) (string, error) {
 	switch platform + "/" + arch {
-	case "darwin/amd64":
-		return "agents-dashboard-darwin-amd64.zip", nil
 	case "darwin/arm64":
 		return "agents-dashboard-darwin-arm64.zip", nil
 	case "windows/amd64":

@@ -6,13 +6,11 @@ import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const EXPECTED_ASSETS = Object.freeze([
-  'agents-dashboard-darwin-amd64.zip',
   'agents-dashboard-darwin-arm64.zip',
   'agents-dashboard-windows-amd64.exe',
   'agents-dashboard-windows-amd64-installer.exe',
   'agents-dashboard-linux-amd64.tar.gz',
   'agents-dashboard-linux-arm64.tar.gz',
-  'agents-dashboard-server-darwin-amd64.tar.gz',
   'agents-dashboard-server-darwin-arm64.tar.gz',
   'agents-dashboard-server-windows-amd64.zip',
   'agents-dashboard-server-linux-amd64.tar.gz',
@@ -135,7 +133,7 @@ function apiClient({ repository, token, fetch, baseURL }) {
 function validateUploadedAssets(assets) {
   const names = assets.map((asset) => asset.name).sort();
   if (names.length !== RELEASE_ASSETS.length || names.some((name, index) => name !== RELEASE_ASSETS[index])) {
-    throw new Error('Release assets must contain exactly the 11 expected payloads and SHA256SUMS');
+    throw new Error('Release assets must contain exactly the 9 expected payloads and SHA256SUMS');
   }
   if (assets.some((asset) => asset.state !== 'uploaded')) throw new Error('Release has assets not fully uploaded');
 }
@@ -243,7 +241,7 @@ async function localManifest(assetDir, requireChecksums) {
   const names = entries.map((entry) => entry.name).sort();
   const expected = requireChecksums || names.includes('SHA256SUMS') ? RELEASE_ASSETS : EXPECTED_ASSETS;
   if (names.length !== expected.length || names.some((name, index) => name !== expected[index])) {
-    throw new Error('Asset directory must contain exactly the 11 expected payloads and optional SHA256SUMS');
+    throw new Error('Asset directory must contain exactly the 9 expected payloads and optional SHA256SUMS');
   }
 }
 

@@ -84,9 +84,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-15-intel
-            os: darwin
-            arch: amd64
           - runner: macos-15
             os: darwin
             arch: arm64
@@ -168,8 +165,8 @@ jobs:
           import { readFileSync } from 'node:fs';
           import { parseVersion } from './scripts/release.mjs';
           const { TARGET_ARCH, RELEASE_TAG } = process.env;
-          const expectedCPU = { amd64: 'x86_64', arm64: 'arm64' }[TARGET_ARCH];
-          assert.ok(expectedCPU, `Unsupported macOS architecture: ${TARGET_ARCH}`);
+          const expectedCPU = 'arm64';
+          assert.equal(TARGET_ARCH, expectedCPU, 'Unsupported macOS release architecture');
           const executable = 'bin/agents-dashboard.app/Contents/MacOS/agents-dashboard';
           assert.equal(execFileSync('lipo', ['-archs', executable], { encoding: 'utf8' }).trim(), expectedCPU);
           const version = parseVersion(RELEASE_TAG);
@@ -233,8 +230,8 @@ jobs:
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           import { execFileSync } from 'node:child_process';
-          const expectedCPU = { amd64: 'x86_64', arm64: 'arm64' }[process.env.TARGET_ARCH];
-          assert.ok(expectedCPU, `Unsupported macOS architecture: ${process.env.TARGET_ARCH}`);
+          const expectedCPU = 'arm64';
+          assert.equal(process.env.TARGET_ARCH, expectedCPU, 'Unsupported macOS release architecture');
           assert.equal(execFileSync('lipo', ['-archs', 'bin/agents-dashboard-server'], { encoding: 'utf8' }).trim(), expectedCPU);
           NODE
       - name: Stage macOS release archives
