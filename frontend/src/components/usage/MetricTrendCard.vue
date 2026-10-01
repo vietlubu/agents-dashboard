@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import ChartBox from "@/components/charts/ChartBox.vue";
 import Card from "@/components/ui/Card.vue";
 import type { Granularity, GranularityChoice, SeriesPoint } from "@/api/dashboard";
 import { baseChartOptions, resolveColor, seriesColor } from "@/lib/chart";
-import { formatBucket, formatTokens, formatUSD } from "@/lib/format";
+import { formatBucket, formatPercent, formatTokens, formatUSD } from "@/lib/format";
 import { useSettingsStore } from "@/stores/settings";
 
 /**
@@ -29,6 +30,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ "update:granularityChoice": [GranularityChoice] }>();
 
+const { t } = useI18n();
 const settings = useSettingsStore();
 const metric = ref<Metric>("total");
 
@@ -89,9 +91,15 @@ const config = computed(() => {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (ctx: { raw: unknown }) => {
-              const value = Number(ctx.raw) || 0;
-              return metric.value === "costUsd" ? formatUSD(value) : formatTokens(value);
+            label: (ctx: { dataIndex: number }) => {
+              const point = props.points.find((p) => p.key === labels.value[ctx.dataIndex]);
+              if (!point) return [];
+              return [
+                `${t("metrics.input")}: ${formatTokens(point.input)}`,
+                `${t("metrics.cacheRead")}: ${formatTokens(point.cacheRead)}`,
+                `${t("metrics.cacheRate")}: ${formatPercent(point.cacheRead, point.input + point.cacheRead)}`,
+                `${t("metrics.output")}: ${formatTokens(point.output)}`,
+              ];
             },
           },
         },

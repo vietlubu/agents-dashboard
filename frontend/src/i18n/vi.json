@@ -60,6 +60,7 @@
     "input": "Đầu vào",
     "output": "Đầu ra",
     "cacheRead": "Đọc cache",
+    "cacheRate": "Tỷ lệ input từ cache",
     "cacheWrite": "Ghi cache",
     "reasoning": "Suy luận",
     "cacheReadShare": "Tỷ lệ đọc cache",

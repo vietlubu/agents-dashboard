@@ -60,6 +60,7 @@
     "input": "Input",
     "output": "Output",
     "cacheRead": "Cache read",
+    "cacheRate": "Input cache rate",
     "cacheWrite": "Cache write",
     "reasoning": "Reasoning",
     "cacheReadShare": "Cache read share",
