@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import Card from "@/components/ui/Card.vue";
 import Select from "@/components/ui/Select.vue";
+import NumberInput from "@/components/ui/NumberInput.vue";
 import Toggle from "@/components/ui/Toggle.vue";
 import { useSettingsStore } from "@/stores/settings";
 import type { SettingsPatch } from "@/api/settings";
@@ -87,15 +88,15 @@ async function save() {
       </div>
       <div class="field">
         <label for="idle">{{ $t('settings.idleInterval') }}</label>
-        <input id="idle" v-model.number="idle" class="input" type="number" min="1" />
+        <NumberInput id="idle" v-model="idle" :min="1" />
       </div>
       <div class="field">
         <label for="burst">{{ $t('settings.burstInterval') }}</label>
-        <input id="burst" v-model.number="burst" class="input" type="number" min="1" />
+        <NumberInput id="burst" v-model="burst" :min="1" />
       </div>
       <div class="field">
         <label for="conc">{{ $t('settings.concurrency') }}</label>
-        <input id="conc" v-model.number="concurrency" class="input" type="number" min="1" max="16" />
+        <NumberInput id="conc" v-model="concurrency" :min="1" :max="16" />
       </div>
       <div class="field">
         <label for="host">{{ $t('settings.serverHost') }}</label>
@@ -103,7 +104,7 @@ async function save() {
       </div>
       <div class="field">
         <label for="port">{{ $t('settings.serverPort') }}</label>
-        <input id="port" v-model.number="serverPort" class="input" type="number" min="1" max="65535" />
+        <NumberInput id="port" v-model="serverPort" :min="1" :max="65535" />
       </div>
     </div>
 

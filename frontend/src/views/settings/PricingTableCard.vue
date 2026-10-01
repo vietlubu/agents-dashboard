@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import Card from "@/components/ui/Card.vue";
+import NumberInput from "@/components/ui/NumberInput.vue";
 import * as api from "@/api/settings";
 
 /**
@@ -119,19 +120,19 @@ function edit(row: api.ModelPrice) {
       </div>
       <div class="field">
         <label>{{ $t('settings.priceInput') }}</label>
-        <input v-model.number="draft.inputPerM" class="input" type="number" step="0.01" min="0" />
+        <NumberInput v-model="draft.inputPerM" :step="0.01" :min="0" />
       </div>
       <div class="field">
         <label>{{ $t('settings.priceOutput') }}</label>
-        <input v-model.number="draft.outputPerM" class="input" type="number" step="0.01" min="0" />
+        <NumberInput v-model="draft.outputPerM" :step="0.01" :min="0" />
       </div>
       <div class="field">
         <label>{{ $t('settings.priceCacheRead') }}</label>
-        <input v-model.number="draft.cacheReadPerM" class="input" type="number" step="0.01" min="0" />
+        <NumberInput v-model="draft.cacheReadPerM" :step="0.01" :min="0" />
       </div>
       <div class="field">
         <label>{{ $t('settings.priceCacheWrite') }}</label>
-        <input v-model.number="draft.cacheWritePerM" class="input" type="number" step="0.01" min="0" />
+        <NumberInput v-model="draft.cacheWritePerM" :step="0.01" :min="0" />
       </div>
     </div>
     <div class="row" style="margin-top: 10px">

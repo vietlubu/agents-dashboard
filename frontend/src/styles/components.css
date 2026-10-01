@@ -57,13 +57,18 @@
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 6px 10px;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 6px 12px;
   background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
 }
 
 .btn:hover:not(:disabled) {
@@ -88,18 +93,50 @@
 
 .input,
 .select {
-  padding: 6px 8px;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 6px 10px;
   background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   font-size: 13px;
+  line-height: 18px;
+  color: var(--text);
   min-width: 0;
+  transition: border-color 0.12s ease, outline 0.12s ease;
+}
+
+.input:hover:not(:disabled),
+.select:hover:not(:disabled) {
+  border-color: var(--border-strong);
 }
 
 .input:focus,
 .select:focus {
   outline: 2px solid var(--accent-soft);
   border-color: var(--accent);
+}
+
+.select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 30px;
+  background-image: var(--select-arrow);
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 16px 16px;
+  cursor: pointer;
+}
+
+.select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.select option {
+  background: var(--bg-elevated);
+  color: var(--text);
 }
 
 .seg {

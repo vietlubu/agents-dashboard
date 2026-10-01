@@ -2,6 +2,7 @@
 import { onMounted, ref } from "vue";
 import Card from "@/components/ui/Card.vue";
 import Toggle from "@/components/ui/Toggle.vue";
+import NumberInput from "@/components/ui/NumberInput.vue";
 import * as api from "@/api/settings";
 
 /**
@@ -66,47 +67,39 @@ async function update(rule: api.PriceRule, patch: Partial<api.PriceRule>) {
         <tr v-for="rule in rules" :key="rule.modelKey">
           <td class="mono">{{ rule.modelKey }}</td>
           <td class="right">
-            <input
-              class="input"
+            <NumberInput
               style="width: 80px"
-              type="number"
-              step="0.1"
-              min="0"
-              :value="rule.inputMult"
-              @change="update(rule, { inputMult: Number(($event.target as HTMLInputElement).value) })"
+              :step="0.1"
+              :min="0"
+              :model-value="rule.inputMult"
+              @change="update(rule, { inputMult: $event })"
             />
           </td>
           <td class="right">
-            <input
-              class="input"
+            <NumberInput
               style="width: 80px"
-              type="number"
-              step="0.1"
-              min="0"
-              :value="rule.outputMult"
-              @change="update(rule, { outputMult: Number(($event.target as HTMLInputElement).value) })"
+              :step="0.1"
+              :min="0"
+              :model-value="rule.outputMult"
+              @change="update(rule, { outputMult: $event })"
             />
           </td>
           <td class="right">
-            <input
-              class="input"
+            <NumberInput
               style="width: 80px"
-              type="number"
-              step="0.1"
-              min="0"
-              :value="rule.cacheReadMult"
-              @change="update(rule, { cacheReadMult: Number(($event.target as HTMLInputElement).value) })"
+              :step="0.1"
+              :min="0"
+              :model-value="rule.cacheReadMult"
+              @change="update(rule, { cacheReadMult: $event })"
             />
           </td>
           <td class="right">
-            <input
-              class="input"
+            <NumberInput
               style="width: 80px"
-              type="number"
-              step="0.1"
-              min="0"
-              :value="rule.cacheWriteMult"
-              @change="update(rule, { cacheWriteMult: Number(($event.target as HTMLInputElement).value) })"
+              :step="0.1"
+              :min="0"
+              :model-value="rule.cacheWriteMult"
+              @change="update(rule, { cacheWriteMult: $event })"
             />
           </td>
           <td>
