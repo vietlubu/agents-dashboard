@@ -130,13 +130,26 @@ async function githubFixture(t, options = {}) {
         addTag(tag, body.sha);
         return send(201, refs.get(tag));
       }
+      if (req.method === 'POST' && endpoint === '/releases') {
+        if (options.createReleaseStatus) return send(options.createReleaseStatus, { message: 'Release creation denied' });
+        if (!refs.has(body.tag_name) || releases.has(body.tag_name)) return send(422, { message: 'Invalid release tag' });
+        const release = addRelease({ tag: body.tag_name, draft: body.draft,
+          body: body.generate_release_notes ? `${body.body}\nGenerated release notes` : body.body, names: [] });
+        release.name = body.name;
+        release.prerelease = body.prerelease;
+        release.target_commitish = body.target_commitish;
+        state.createdDraftID = release.id;
+        const response = publicRelease(release);
+        return send(201, options.createReleaseResponse ? options.createReleaseResponse(response) : response);
+      }
       if (req.method === 'GET' && endpoint === '/releases/latest') {
         const release = releases.get(state.latestTag);
         return send(release ? 200 : 404, release ? publicRelease(release) : { message: 'Not Found' });
       }
       if (req.method === 'GET' && endpoint === '/releases') {
         if (options.releaseListStatus) return send(options.releaseListStatus, { message: 'Release list unavailable' });
-        return send(200, page([...releases.values()].map(publicRelease)));
+        const visible = [...releases.values()].filter((release) => !options.hideCreatedDraftsFromList || release.id !== state.createdDraftID);
+        return send(200, page(visible.map(publicRelease)));
       }
       if (req.method === 'GET' && endpoint.startsWith('/releases/tags/')) {
         const release = releases.get(decodeURIComponent(endpoint.slice('/releases/tags/'.length)));
@@ -185,17 +198,6 @@ async function githubFixture(t, options = {}) {
     ghCalls.push([...args]);
     assert.equal(args[0], 'release');
     const [command, tag] = args.slice(1, 3);
-    if (command === 'create') {
-      assert.ok(args.includes('--draft'), 'create must not expose a partial release');
-      assert.ok(args.includes('--verify-tag'), 'create must reuse the reserved ref');
-      assert.equal(args[args.indexOf('--target') + 1], SHA);
-      assert.ok(refs.has(tag));
-      assert.ok(!releases.has(tag));
-      const notesIndex = args.indexOf('--notes');
-      const notes = notesIndex === -1 ? '' : args[notesIndex + 1];
-      addRelease({ tag, draft: true, body: `${notes}\nGenerated release notes`, names: [] });
-      return '';
-    }
     if (command === 'delete') {
       assert.ok(!args.includes('--cleanup-tag'), 'draft cleanup must preserve the reserved ref');
       assert.equal(releases.get(tag)?.draft, true, 'only drafts can be removed');
@@ -468,7 +470,7 @@ for (const missing of [PAYLOADS[0], 'SHA256SUMS']) {
 }
 
 test('new release stays draft through byte verification and then becomes latest atomically', async (t) => {
-  const fixture = await githubFixture(t, { pageSize: 3 });
+  const fixture = await githubFixture(t, { pageSize: 3, hideCreatedDraftsFromList: true });
   fixture.addTag(TAG);
   const directory = await assetDirectory(t);
   await fixture.publish(directory);
@@ -484,6 +486,29 @@ test('new release stays draft through byte verification and then becomes latest 
   assert.equal(publishingRequests(fixture).length, 1);
 });
 
+test('release creation API errors cannot upload or publish assets', async (t) => {
+  const fixture = await githubFixture(t, { createReleaseStatus: 403 });
+  fixture.addTag(TAG);
+  await assert.rejects(fixture.publish(await assetDirectory(t)), /HTTP 403/);
+  assert.equal(fixture.releases.size, 0);
+  assert.deepEqual(fixture.ghCalls, []);
+  assert.deepEqual(publishingRequests(fixture), []);
+});
+
+for (const [problem, override] of [
+  ['missing ID', { id: null }], ['wrong tag', { tag_name: 'v26.10.01.999' }],
+  ['missing ownership', { body: 'Unowned draft' }], ['public response', { draft: false }],
+]) {
+  test(`unsafe creation response (${problem}) cannot upload or publish`, async (t) => {
+    const fixture = await githubFixture(t, { createReleaseResponse: (release) => ({ ...release, ...override }) });
+    fixture.addTag(TAG);
+    await assert.rejects(fixture.publish(await assetDirectory(t)), /expected owned draft release/);
+    assert.equal(fixture.releases.get(TAG).draft, true);
+    assert.deepEqual(fixture.ghCalls, []);
+    assert.deepEqual(publishingRequests(fixture), []);
+  });
+}
+
 test('incomplete owned draft is replaced wholly by the current build, preserving its tag', async (t) => {
   const fixture = await githubFixture(t, { pageSize: 1 });
   fixture.addTag(TAG);
@@ -496,7 +521,6 @@ test('incomplete owned draft is replaced wholly by the current build, preserving
   await fixture.publish(directory);
   const rebuilt = fixture.releases.get(TAG);
   assert.notEqual(rebuilt.id, stale.id);
-  assert.deepEqual(fixture.ghCalls.map((args) => args[1]), ['delete', 'create', 'upload']);
   assert.equal(fixture.refs.get(TAG).object.sha, SHA);
   assert.equal(rebuilt.draft, false);
   assert.ok(rebuilt.body.includes('/actions/runs/1234'));

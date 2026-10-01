@@ -270,9 +270,12 @@ No mobile, Docker or Linux package-manager artifacts are published.
 Publication verifies the complete asset manifest and hashes in a private draft
 before making it public. Existing public releases are never overwritten;
 only a draft bearing the exact source-SHA ownership marker may be recreated.
-Draft lookup uses the authenticated, paginated releases list when GitHub's
-by-tag endpoint returns 404; that endpoint does not expose draft releases.
-A draft is matched by its exact tag, and ambiguous matches fail without mutation.
+Existing draft lookup uses the authenticated, paginated releases list when
+GitHub's by-tag endpoint returns 404; drafts are matched by exact tag and
+ambiguous matches fail without mutation. New drafts are created through REST;
+the creation response supplies the release ID used for subsequent verification
+and publication, so fresh draft visibility in tag/list indexes is not required.
+`gh` still handles asset uploads and removal of automation-owned drafts.
 Commit ancestry prevents an older or diverged build from replacing `latest`.
 
 Desktop update payloads are selected by exact OS/architecture name, never by a

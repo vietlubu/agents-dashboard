@@ -353,16 +353,19 @@ export async function publish({ repository, sha, token, tag, runId, assetDir,
     '- These builds have no paid signing certificates: macOS is ad-hoc signed, not notarized; Windows is not Authenticode signed. Gatekeeper or SmartScreen may require first-install approval.',
     '- SHA256SUMS verifies download integrity; it is not an independent code signature.',
   ].join('\n');
-  // gh prepends explicit notes to generated notes, preserving ownership even if upload fails.
-  await invokeGh(['release', 'create', tag, '--draft', '--verify-tag', '--target', sha,
-    '--title', tag, '--generate-notes', '--notes', instructions, '--repo', repository]);
-  release = await api.release(tag);
-  if (!release?.draft || release.tag_name !== tag || !release.body?.includes(marker)) {
-    throw new Error('gh did not create the expected owned draft release');
+  // Keep the creation response: pending-tag/list indexes need not expose a new draft.
+  release = (await api.request('releases', {
+    method: 'POST', body: {
+      tag_name: tag, target_commitish: sha, name: tag, body: instructions,
+      draft: true, prerelease: false, generate_release_notes: true,
+    },
+  })).data;
+  if (!Number.isSafeInteger(release?.id) || release.id <= 0 || !release.draft || release.tag_name !== tag || !release.body?.includes(marker)) {
+    throw new Error('GitHub did not return the expected owned draft release');
   }
   const draftId = release.id;
   await invokeGh(['release', 'upload', tag, ...RELEASE_ASSETS.map((name) => resolve(assetDir, name)), '--repo', repository]);
-  release = await api.release(tag);
+  release = (await api.request(`releases/${draftId}`)).data;
   if (!release?.draft || release.id !== draftId || release.tag_name !== tag || !release.body?.includes(marker)) {
     throw new Error('Owned release must remain the same draft during upload verification');
   }
