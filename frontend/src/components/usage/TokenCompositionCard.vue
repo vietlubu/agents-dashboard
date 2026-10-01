@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import ChartBox from "@/components/charts/ChartBox.vue";
 import Card from "@/components/ui/Card.vue";
 import type { Totals } from "@/api/dashboard";
@@ -8,13 +9,15 @@ import { formatTokens, formatUSD } from "@/lib/format";
 
 /** Token composition: input, output, cache read, cache write. */
 const props = defineProps<{ totals: Totals }>();
+const { t } = useI18n();
 
+/** Canvas labels are drawn, not templated: they must be translated where they are built. */
 const config = computed(() => {
   const buckets = [
-    { label: "metrics.input", value: props.totals.input, color: seriesColor(0) },
-    { label: "metrics.output", value: props.totals.output, color: seriesColor(1) },
-    { label: "metrics.cacheRead", value: props.totals.cacheRead, color: seriesColor(2) },
-    { label: "metrics.cacheWrite", value: props.totals.cacheWrite, color: seriesColor(3) },
+    { label: t("metrics.input"), value: props.totals.input, color: seriesColor(0) },
+    { label: t("metrics.output"), value: props.totals.output, color: seriesColor(1) },
+    { label: t("metrics.cacheRead"), value: props.totals.cacheRead, color: seriesColor(2) },
+    { label: t("metrics.cacheWrite"), value: props.totals.cacheWrite, color: seriesColor(3) },
   ];
   return {
     type: "doughnut" as const,
