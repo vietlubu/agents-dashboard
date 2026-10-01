@@ -1,0 +1,80 @@
+/*
+ * The application data root is the palette; components only ever reference these variables,
+ * so the light/dark switch is one attribute on <html>.
+ */
+:root {
+  --bg: #0f1115;
+  --bg-elevated: #16181f;
+  --bg-sunken: #0b0d11;
+  --border: #262a35;
+  --border-strong: #333846;
+  --text: #e6e8ee;
+  --text-muted: #98a0b3;
+  --text-faint: #7c8494;
+
+  --accent: #5b8cff;
+  --accent-soft: rgba(91, 140, 255, 0.14);
+  --positive: #3fb950;
+  --negative: #f85149;
+  --warn: #d29922;
+
+  --series-1: #5b8cff;
+  --series-2: #3fb950;
+  --series-3: #d29922;
+  --series-4: #bc8cff;
+  --series-5: #ff7b72;
+  --series-6: #39c5cf;
+  --series-7: #f778ba;
+  --series-8: #8b949e;
+
+  --heat-0: #16181f;
+  --heat-1: #1d3a2a;
+  --heat-2: #2b5c3f;
+  --heat-3: #3d8b57;
+  --heat-4: #52c06c;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --gap: 16px;
+  --gap-sm: 8px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    "Apple Color Emoji", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  /* Native controls, scrollbars and form widgets follow the theme. */
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f6f7f9;
+  --bg-elevated: #ffffff;
+  --bg-sunken: #eceef2;
+  --border: #dfe2e8;
+  --border-strong: #c7ccd6;
+  --text: #1b1f27;
+  --text-muted: #5b6473;
+  --text-faint: #626b7a;
+
+  --accent: #2f6bff;
+  --accent-soft: rgba(47, 107, 255, 0.1);
+  --positive: #1a7f37;
+  --negative: #cf222e;
+  --warn: #9a6700;
+
+  --series-1: #2f6bff;
+  --series-2: #1a7f37;
+  --series-3: #9a6700;
+  --series-4: #8250df;
+  --series-5: #cf222e;
+  --series-6: #0d7d8a;
+  --series-7: #bf3989;
+  --series-8: #6e7781;
+
+  --heat-0: #eceef2;
+  --heat-1: #c6e7cd;
+  --heat-2: #92d1a2;
+  --heat-3: #52b168;
+  --heat-4: #1f7a37;
+
+  color-scheme: light;
+}
