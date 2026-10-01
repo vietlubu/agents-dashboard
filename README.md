@@ -219,6 +219,29 @@ test suite; `vue-tsc` is its only automated check. Go tests use the stdlib `test
 with temp-dir fixtures. `internal/pricing/live_test.go` is the only network test and is
 skipped under `-short` unless `AGENTS_DASHBOARD_LIVE_PRICING` is set.
 
+### GitHub Actions
+
+`.github/workflows/release.yml` runs release-script fixtures, the real frontend
+build, desktop/server Go checks and an isolated server smoke for PRs to `main`.
+Pushes to `main`, and manual runs on `main`, then reserve a tag, build five native
+desktop/server targets and publish only after every native smoke passes. Manual
+runs on other branches run checks only. No PAT, signing secret, tag-triggered
+workflow or committed version file is required; only reserve/publish jobs get
+`contents: write` through the workflow token.
+
+The entire main release run is serialized with `queue: max` (GitHub permits up
+to 100 pending runs). Commit ancestry still controls latest promotion because
+queue waiting order is not necessarily commit order. Rerunning a failed build
+reuses its reserved tag and replaces only that run's temporary Actions artifact;
+an already complete public release is left untouched.
+
+Native jobs verify binary architecture, macOS signing/plist versions and Windows
+VERSIONINFO. `scripts/smoke-server.mjs <binary> <version> [port]` launches the actual
+server with isolated home/data, checks `/health` and the embedded frontend, and
+calls `AppService.Version`/`UpdateStatus` to prove the full stamp and disabled
+server updater. Go's `-trimpath` omits linker flags from `go version -m`, so build
+info is used for OS/architecture and the live binding for version verification.
+
 ### Release contract
 
 Release tags and binary versions use `vYY.MM.DD.NNN` (Vietnam date,

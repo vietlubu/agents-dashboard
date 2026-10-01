@@ -1,0 +1,397 @@
+name: Checks and release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && 'main-release' || format('checks-{0}', github.ref) }}
+  cancel-in-progress: false
+  queue: max
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  checks:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+      - name: Set up build tools and frontend dependencies
+        run: |
+          npm install --global pnpm@8.15.6
+          pnpm --dir frontend install --frozen-lockfile
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.18
+      - name: Check release allocation and publication behavior
+        run: node --test scripts/release.test.mjs
+      - name: Build real frontend and regenerate bindings
+        run: wails3 task common:build:frontend
+      - name: Check desktop and server Go packages
+        run: |
+          go test -short ./...
+          go test -short -tags server ./...
+      - name: Build development server
+        env:
+          CGO_ENABLED: '0'
+        run: wails3 task build:server VERSION=dev
+      - name: Smoke development server with isolated data
+        run: node scripts/smoke-server.mjs bin/agents-dashboard-server dev
+
+  reserve:
+    needs: checks
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.reserve.outputs.tag }}
+      published: ${{ steps.reserve.outputs.published }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+      - name: Reserve or reuse the source commit's Vietnam-date version
+        id: reserve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release.mjs reserve
+
+  build:
+    needs: [checks, reserve]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.reserve.outputs.published != 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            os: darwin
+            arch: amd64
+          - runner: macos-15
+            os: darwin
+            arch: arm64
+          - runner: windows-2025
+            os: windows
+            arch: amd64
+          - runner: ubuntu-24.04
+            os: linux
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            os: linux
+            arch: arm64
+    env:
+      RELEASE_TAG: ${{ needs.reserve.outputs.tag }}
+      TARGET_OS: ${{ matrix.os }}
+      TARGET_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+      - name: Install native Linux desktop dependencies
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+          pkg-config --atleast-version=4.14 gtk4
+          pkg-config --exists webkitgtk-6.0
+      - name: Set up NSIS on Windows
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $makensis = Get-Command makensis.exe -CommandType Application -ErrorAction SilentlyContinue
+          if (-not $makensis) {
+            choco install nsis --yes --no-progress
+            if ($LASTEXITCODE -notin @(0, 1641, 3010)) {
+              throw "NSIS installation failed with exit code $LASTEXITCODE"
+            }
+            $makensis = Get-Command makensis.exe -CommandType Application -ErrorAction SilentlyContinue
+          }
+          $makensisPath = if ($makensis) { $makensis.Source } else { $null }
+          if (-not $makensisPath) {
+            $candidates = @(
+              (Join-Path ${env:ProgramFiles(x86)} 'NSIS\makensis.exe'),
+              (Join-Path $env:ProgramFiles 'NSIS\makensis.exe')
+            )
+            $makensisPath = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+          }
+          if (-not $makensisPath) { throw 'makensis.exe was not found after NSIS setup' }
+          $makensisPath = (Resolve-Path -LiteralPath $makensisPath).Path
+          Split-Path -Parent $makensisPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & $makensisPath /VERSION
+          if ($LASTEXITCODE -ne 0) { throw "makensis verification failed with exit code $LASTEXITCODE" }
+      - name: Set up native build tools and frontend dependencies
+        run: |
+          npm install --global pnpm@8.15.6
+          pnpm --dir frontend install --frozen-lockfile
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.18
+      - name: Prepare exact release staging directory
+        run: mkdir -p bin/release
+      - name: Build macOS desktop bundle
+        if: matrix.os == 'darwin'
+        run: wails3 task darwin:package ARCH="$TARGET_ARCH" VERSION="$RELEASE_TAG"
+      - name: Verify macOS desktop bundle
+        if: matrix.os == 'darwin'
+        run: |
+          test -x bin/agents-dashboard.app/Contents/MacOS/agents-dashboard
+          codesign --verify --deep --strict bin/agents-dashboard.app
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { readFileSync } from 'node:fs';
+          import { parseVersion } from './scripts/release.mjs';
+          const { TARGET_ARCH, RELEASE_TAG } = process.env;
+          const expectedCPU = { amd64: 'x86_64', arm64: 'arm64' }[TARGET_ARCH];
+          assert.ok(expectedCPU, `Unsupported macOS architecture: ${TARGET_ARCH}`);
+          const executable = 'bin/agents-dashboard.app/Contents/MacOS/agents-dashboard';
+          assert.equal(execFileSync('lipo', ['-archs', executable], { encoding: 'utf8' }).trim(), expectedCPU);
+          const version = parseVersion(RELEASE_TAG);
+          assert.equal(version.tag, RELEASE_TAG);
+          const plist = 'bin/agents-dashboard.app/Contents/Info.plist';
+          for (const [key, expected] of [['CFBundleShortVersionString', version.short], ['CFBundleVersion', version.bundle]]) {
+            assert.equal(execFileSync('plutil', ['-extract', key, 'raw', '-o', '-', plist], { encoding: 'utf8' }).trim(), expected);
+          }
+          // Supplemental stamp evidence; the common server smoke proves runtime Version.
+          assert.ok(readFileSync(executable).includes(Buffer.from(RELEASE_TAG)), 'Desktop binary lacks full release tag');
+          NODE
+      - name: Build native Linux desktop
+        if: matrix.os == 'linux'
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const arch = { amd64: 'x64', arm64: 'arm64' }[process.env.TARGET_ARCH];
+          assert.ok(arch, 'unsupported Linux target architecture');
+          assert.equal(process.platform, 'linux', 'Linux builds require a native Linux runner');
+          assert.equal(process.arch, arch, 'Linux builds require the matching native architecture');
+          NODE
+          wails3 task linux:build ARCH="$TARGET_ARCH" VERSION="$RELEASE_TAG"
+      - name: Build Windows desktop and per-user installer
+        if: matrix.os == 'windows'
+        run: wails3 task windows:package ARCH=amd64 INSTALL_SCOPE=user VERSION="$RELEASE_TAG"
+      - name: Check updater behavior on the native target
+        run: go test -short ./internal/update ./internal/service
+      - name: Build native pure-Go server separately
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: '0'
+        run: wails3 task build:server VERSION="$RELEASE_TAG"
+      - name: Smoke native server and prove the full runtime version
+        run: |
+          if [ "$TARGET_OS" = windows ]; then
+            node scripts/smoke-server.mjs bin/agents-dashboard-server.exe "$RELEASE_TAG"
+          else
+            node scripts/smoke-server.mjs bin/agents-dashboard-server "$RELEASE_TAG"
+          fi
+      - name: Verify Go binary build targets
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          const { TARGET_OS: os, TARGET_ARCH: arch } = process.env;
+          const desktop = os === 'darwin' ? 'bin/agents-dashboard.app/Contents/MacOS/agents-dashboard' : `bin/agents-dashboard${os === 'windows' ? '.exe' : ''}`;
+          const server = `bin/agents-dashboard-server${os === 'windows' ? '.exe' : ''}`;
+          for (const binary of [desktop, server]) {
+            const info = execFileSync('go', ['version', '-m', binary], { encoding: 'utf8' });
+            console.log(info);
+            assert.ok(info.includes(`GOOS=${os}`), `${binary}: wrong Go OS`);
+            assert.ok(info.includes(`GOARCH=${arch}`), `${binary}: wrong Go architecture`);
+          }
+          // Go omits ldflags under trimpath; the server binding smoke verifies the full tag.
+          NODE
+      - name: Verify macOS server architecture
+        if: matrix.os == 'darwin'
+        run: |
+          test -x bin/agents-dashboard-server
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          const expectedCPU = { amd64: 'x86_64', arm64: 'arm64' }[process.env.TARGET_ARCH];
+          assert.ok(expectedCPU, `Unsupported macOS architecture: ${process.env.TARGET_ARCH}`);
+          assert.equal(execFileSync('lipo', ['-archs', 'bin/agents-dashboard-server'], { encoding: 'utf8' }).trim(), expectedCPU);
+          NODE
+      - name: Stage macOS release archives
+        if: matrix.os == 'darwin'
+        run: |
+          (
+            cd bin
+            zip -qry "release/agents-dashboard-darwin-${TARGET_ARCH}.zip" agents-dashboard.app
+          )
+          tar -czf "bin/release/agents-dashboard-server-darwin-${TARGET_ARCH}.tar.gz" -C bin agents-dashboard-server
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          const arch = process.env.TARGET_ARCH;
+          const desktop = `bin/release/agents-dashboard-darwin-${arch}.zip`;
+          const entries = execFileSync('unzip', ['-Z1', desktop], { encoding: 'utf8' }).trim().split('\n');
+          assert.ok(entries.every((entry) => entry.startsWith('agents-dashboard.app/')), 'Desktop archive must contain only the app root');
+          assert.ok(entries.includes('agents-dashboard.app/Contents/MacOS/agents-dashboard'), 'Desktop archive is missing its executable');
+          const server = `bin/release/agents-dashboard-server-darwin-${arch}.tar.gz`;
+          assert.equal(execFileSync('tar', ['-tzf', server], { encoding: 'utf8' }).trim(), 'agents-dashboard-server');
+          NODE
+      - name: Verify Linux native binaries
+        if: matrix.os == 'linux'
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { openSync, readSync, closeSync, statSync, readFileSync } from 'node:fs';
+          const machine = { amd64: 62, arm64: 183 }[process.env.TARGET_ARCH];
+          assert.ok(machine, 'unsupported Linux target architecture');
+          for (const binary of ['bin/agents-dashboard', 'bin/agents-dashboard-server']) {
+            const stat = statSync(binary);
+            assert.ok(stat.isFile(), `${binary}: expected a regular file`);
+            assert.ok(stat.mode & 0o100, `${binary}: owner execute bit is missing`);
+            const header = Buffer.alloc(20);
+            const fd = openSync(binary, 'r');
+            try {
+              assert.equal(readSync(fd, header, 0, header.length, 0), header.length, `${binary}: truncated ELF header`);
+            } finally {
+              closeSync(fd);
+            }
+            assert.deepEqual(header.subarray(0, 4), Buffer.from([0x7f, 0x45, 0x4c, 0x46]), `${binary}: not ELF`);
+            assert.equal(header[4], 2, `${binary}: expected ELF64`);
+            assert.equal(header[5], 1, `${binary}: expected little-endian ELF`);
+            assert.equal(header[6], 1, `${binary}: unsupported ELF identification version`);
+            assert.equal(header.readUInt16LE(18), machine, `${binary}: wrong native machine architecture`);
+          }
+          assert.ok(process.env.RELEASE_TAG, 'missing release tag');
+          assert.ok(readFileSync('bin/agents-dashboard').includes(Buffer.from(process.env.RELEASE_TAG)), 'desktop binary lacks the full release tag (supplementary byte check only)');
+          NODE
+      - name: Stage Linux portable archives
+        if: matrix.os == 'linux'
+        run: |
+          tar -czf "bin/release/agents-dashboard-linux-${TARGET_ARCH}.tar.gz" -C bin agents-dashboard
+          tar -czf "bin/release/agents-dashboard-server-linux-${TARGET_ARCH}.tar.gz" -C bin agents-dashboard-server
+          test "$(tar -tzf "bin/release/agents-dashboard-linux-${TARGET_ARCH}.tar.gz")" = agents-dashboard
+          test "$(tar -tzf "bin/release/agents-dashboard-server-linux-${TARGET_ARCH}.tar.gz")" = agents-dashboard-server
+      - name: Verify Windows binaries and version resources
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RELEASE_TAG -notmatch '^v(\d{2})\.(\d{2})\.(\d{2})\.(\d{3})$') {
+            throw "Invalid release tag: $env:RELEASE_TAG"
+          }
+          $numericVersion = (@(1, 2, 3, 4) | ForEach-Object { [int]$Matches[$_] }) -join '.'
+          function Assert-Amd64([string] $path) {
+            $reader = [IO.BinaryReader]::new([IO.File]::OpenRead((Resolve-Path -LiteralPath $path).Path))
+            try {
+              if ($reader.ReadUInt16() -ne 0x5A4D) { throw "$path has no DOS header" }
+              $reader.BaseStream.Position = 0x3C
+              $peOffset = $reader.ReadUInt32()
+              $reader.BaseStream.Position = $peOffset
+              if ($reader.ReadUInt32() -ne 0x00004550) { throw "$path has no PE header" }
+              if ($reader.ReadUInt16() -ne 0x8664) { throw "$path is not an amd64 PE binary" }
+            } finally {
+              $reader.Dispose()
+            }
+          }
+          $desktop = 'bin/agents-dashboard.exe'
+          $server = 'bin/agents-dashboard-server.exe'
+          $installer = 'bin/agents-dashboard-amd64-installer.exe'
+          Assert-Amd64 $desktop
+          Assert-Amd64 $server
+          # The NSIS installer may legitimately use a 32-bit bootstrap stub.
+          foreach ($path in @($desktop, $installer, $server)) {
+            $info = [Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path -LiteralPath $path).Path)
+            # A server build has no generated desktop version resource.
+            if ($path -eq $server -and [string]::IsNullOrEmpty($info.FileVersion)) { continue }
+            if ($info.FileVersion -cne $env:RELEASE_TAG -or $info.ProductVersion -cne $env:RELEASE_TAG) {
+              throw "$path version strings do not match $env:RELEASE_TAG"
+            }
+            $fixedFileVersion = "$($info.FileMajorPart).$($info.FileMinorPart).$($info.FileBuildPart).$($info.FilePrivatePart)"
+            if ($fixedFileVersion -cne $numericVersion) {
+              throw "$path fixed file version is $fixedFileVersion; expected $numericVersion"
+            }
+            if ($path -eq $installer) {
+              $fixedProductVersion = "$($info.ProductMajorPart).$($info.ProductMinorPart).$($info.ProductBuildPart).$($info.ProductPrivatePart)"
+              if ($fixedProductVersion -cne $numericVersion) {
+                throw "$path fixed product version is $fixedProductVersion; expected $numericVersion"
+              }
+            }
+            Write-Host "$path VERSIONINFO: $env:RELEASE_TAG ($fixedFileVersion)"
+          }
+          foreach ($path in @($desktop, $server)) {
+            $bytes = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $path).Path)
+            if (-not [Text.Encoding]::Latin1.GetString($bytes).Contains($env:RELEASE_TAG)) {
+              throw "$path does not contain the full release tag"
+            }
+          }
+      - name: Stage Windows release payloads
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Copy-Item -LiteralPath 'bin/agents-dashboard.exe' -Destination 'bin/release/agents-dashboard-windows-amd64.exe'
+          Copy-Item -LiteralPath 'bin/agents-dashboard-amd64-installer.exe' -Destination 'bin/release/agents-dashboard-windows-amd64-installer.exe'
+          Compress-Archive -LiteralPath 'bin/agents-dashboard-server.exe' -DestinationPath 'bin/release/agents-dashboard-server-windows-amd64.zip'
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath 'bin/release/agents-dashboard-server-windows-amd64.zip').Path)
+          try {
+            if ($archive.Entries.Count -ne 1 -or $archive.Entries[0].FullName -cne 'agents-dashboard-server.exe') {
+              throw 'Windows server ZIP must contain exactly one root agents-dashboard-server.exe'
+            }
+          } finally {
+            $archive.Dispose()
+          }
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-${{ matrix.os }}-${{ matrix.arch }}
+          path: bin/release/*
+          if-no-files-found: error
+          overwrite: true
+
+  publish:
+    needs: [reserve, build]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.reserve.outputs.published != 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ needs.reserve.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: release-*
+          path: bin/release
+          merge-multiple: true
+      - name: Build and verify the exact release checksum manifest
+        run: node scripts/release.mjs checksums bin/release
+      - name: Verify uploaded bytes and atomically publish the complete draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release.mjs publish bin/release
