@@ -18,6 +18,7 @@ import (
 	"github.com/vietlubu/agents-dashboard/internal/config"
 	"github.com/vietlubu/agents-dashboard/internal/pricing"
 	"github.com/vietlubu/agents-dashboard/internal/service"
+	"github.com/vietlubu/agents-dashboard/internal/sleep"
 	"github.com/vietlubu/agents-dashboard/internal/store"
 	syncengine "github.com/vietlubu/agents-dashboard/internal/sync"
 	"github.com/vietlubu/agents-dashboard/internal/version"
@@ -42,6 +43,7 @@ func init() {
 	application.RegisterEvent[service.PricingSyncedPayload](service.EventPricingSynced)
 	application.RegisterEvent[store.Settings](service.EventSettingsSaved)
 	application.RegisterEvent[service.UpdateStatus](service.EventAppUpdate)
+	application.RegisterEvent[sleep.Status](service.EventSleepStatus)
 }
 
 func main() {
@@ -73,11 +75,27 @@ func main() {
 	scheduler := syncengine.NewScheduler(engine, cfg, logger)
 
 	var app *application.App
+	platform := sleep.DefaultPlatform()
+	controller := sleep.New(sleep.Deps{
+		Cfg:       cfg,
+		Activity:  sleep.NewMonitor(db, engine.LastChangedAt, platform.Processes),
+		Inhibitor: platform.Inhibitor,
+		Sleeper:   platform.Sleeper,
+		Idler:     platform.Idler,
+		Supported: platform.Supported,
+		Log:       logger,
+		OnStatus: func(st sleep.Status) {
+			if app != nil {
+				app.Event.Emit(service.EventSleepStatus, st)
+			}
+		},
+	})
 	deps := &service.Deps{
 		DB:        db,
 		Cfg:       cfg,
 		Engine:    engine,
 		Scheduler: scheduler,
+		Sleep:     controller,
 		Catalog:   catalog,
 		Log:       logger,
 		Emit: func(name string, payload any) {
@@ -88,6 +106,7 @@ func main() {
 	}
 
 	settings := service.NewSettingsService(deps)
+	sleepSvc := service.NewSleepService(deps)
 	appSvc := service.NewAppService(deps)
 
 	app = application.New(application.Options{
@@ -99,6 +118,7 @@ func main() {
 			application.NewService(service.NewEventsService(deps)),
 			application.NewService(service.NewMetaService(deps)),
 			application.NewService(settings),
+			application.NewService(sleepSvc),
 			application.NewService(service.NewSyncService(deps)),
 		},
 		Assets: application.AssetOptions{
@@ -125,9 +145,11 @@ func main() {
 	}
 
 	openMainWindow(app)
+	setupTray(app, settings, sleepSvc)
 
 	app.OnShutdown(func() {
 		scheduler.Stop()
+		controller.Stop()
 	})
 
 	if err := app.Run(); err != nil {

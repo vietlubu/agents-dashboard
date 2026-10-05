@@ -5,7 +5,7 @@ import Select from "@/components/ui/Select.vue";
 import NumberInput from "@/components/ui/NumberInput.vue";
 import Toggle from "@/components/ui/Toggle.vue";
 import { useSettingsStore } from "@/stores/settings";
-import type { SettingsPatch } from "@/api/settings";
+import { settingsPatch } from "@/api/settings";
 
 /**
  * General settings.
@@ -53,7 +53,7 @@ const nonLoopback = computed(
 async function save() {
   saved.value = "";
   error.value = "";
-  const patch: SettingsPatch = {
+  const patch = settingsPatch({
     tz: zone.value,
     idleIntervalSeconds: idle.value,
     burstIntervalSeconds: burst.value,
@@ -63,7 +63,7 @@ async function save() {
     serverPort: serverPort.value,
     theme: settings.settings?.theme ?? "system",
     locale: settings.settings?.locale ?? "en",
-  };
+  });
   try {
     await settings.update(patch);
     saved.value = settings.timezone === zone.value ? "settings.saved" : "settings.rebuilt";

@@ -160,10 +160,37 @@ database and overlays them without a restart.
 | `AGENTS_DASHBOARD_SERVER_HOST` | `localhost` | HTTP bind host (server build) |
 | `AGENTS_DASHBOARD_SERVER_PORT` | `8080` | HTTP bind port (server build) |
 | `AGENTS_DASHBOARD_AUTO_SYNC_PRICES` | `true` | Download the price catalog at startup |
+| `AGENTS_DASHBOARD_SLEEP_ENABLED` | `false` | Keep the machine awake while an agent is active |
+| `AGENTS_DASHBOARD_SLEEP_AFTER` | `5m` | Delay before sleeping once every agent stops |
+| `AGENTS_DASHBOARD_SLEEP_ACTIVE_WINDOW` | `2m` | How recently a session must have written to count as active |
+| `AGENTS_DASHBOARD_PREVENT_SYSTEM_SLEEP` | `true` | Hold off idle system sleep while an agent is active |
+| `AGENTS_DASHBOARD_PREVENT_DISPLAY_SLEEP` | `true` | Hold off display sleep while an agent is active |
+| `AGENTS_DASHBOARD_PREVENT_LID_SLEEP` | `false` | Keep running with the lid closed (see below) |
 
 The database lives at `<AGENTS_DASHBOARD_HOME>/dashboard.db`, the log at
 `<AGENTS_DASHBOARD_HOME>/agents-dashboard.log`. Delete both to start over — the next scan
 rebuilds everything from the agent files.
+
+### Sleep control and the menu bar
+
+**Settings → Sleep control** and the menu-bar icon share the same switches. While an agent
+process is running **and** its session file or database was written within the active window,
+the machine is held awake with the selected assertions; once every agent stops, the machine
+sleeps after the configured delay — but only if the keyboard and mouse are idle too, so a
+desktop in use is never suspended. A session that is open but idle does not hold the machine
+awake, and before any agent has run the feature stays out of the way.
+
+| | Keep-awake | Display | Lid closed | Sleep now |
+|---|---|---|---|---|
+| macOS | `caffeinate -i` | `caffeinate -d` | `caffeinate -s` on AC, or one admin prompt to set `pmset disablesleep` | `pmset sleepnow` |
+| Windows | `SetThreadExecutionState` | `+ ES_DISPLAY_REQUIRED` | no supported API | `SetSuspendState` |
+| Linux | `systemd-inhibit --what=idle:sleep` | best-effort (may be unavailable on Wayland) | `handle-lid-switch` | `systemctl suspend` |
+
+The lid-closed switch is the one with a side effect: on macOS, keeping a laptop running with
+the lid closed on battery needs the kernel `SleepDisabled` flag, which asks for an
+administrator password **once** and stays set system-wide until you press **Restore system
+sleep**. Declining the prompt falls back to `caffeinate -s`, which only works on AC power.
+The headless server build has no menu bar and never asserts sleep control.
 
 ## CLI scan report
 

@@ -317,6 +317,16 @@ export interface Settings {
     "serverPort": number;
     "theme": string;
     "locale": string;
+
+    /**
+     * Sleep control.
+     */
+    "sleepEnabled": boolean;
+    "sleepAfterSeconds": number;
+    "sleepActiveWindowSeconds": number;
+    "preventSystemSleep": boolean;
+    "preventDisplaySleep": boolean;
+    "preventLidClosedSleep": boolean;
 }
 
 /**
@@ -332,6 +342,16 @@ export interface SettingsPatch {
     "serverPort": number;
     "theme": string;
     "locale": string;
+
+    /**
+     * Sleep control. The booleans are pointers so "off" is distinguishable from "unchanged".
+     */
+    "sleepEnabled": boolean | null;
+    "preventSystemSleep": boolean | null;
+    "preventDisplaySleep": boolean | null;
+    "preventLidClosedSleep": boolean | null;
+    "sleepAfterSeconds": number;
+    "sleepActiveWindowSeconds": number;
 }
 
 /**

@@ -20,6 +20,15 @@ const (
 	SettingServerPort     = "server_port"
 	SettingTheme          = "theme"
 	SettingLocale         = "locale"
+
+	// Sleep control. Disabled by default: keeping a machine awake is an opt-in power
+	// behaviour, not something a usage tracker should do unasked.
+	SettingSleepEnabled          = "sleep_enabled"
+	SettingSleepAfterS           = "sleep_after_seconds"
+	SettingSleepActiveWindowS    = "sleep_active_window_seconds"
+	SettingPreventSystemSleep    = "prevent_system_sleep"
+	SettingPreventDisplaySleep   = "prevent_display_sleep"
+	SettingPreventLidClosedSleep = "prevent_lid_closed_sleep"
 )
 
 // GetSetting reads one setting.

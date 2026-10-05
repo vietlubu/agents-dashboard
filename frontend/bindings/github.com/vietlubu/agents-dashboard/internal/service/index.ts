@@ -6,6 +6,7 @@ import * as DashboardService from "./dashboardservice.js";
 import * as EventsService from "./eventsservice.js";
 import * as MetaService from "./metaservice.js";
 import * as SettingsService from "./settingsservice.js";
+import * as SleepService from "./sleepservice.js";
 import * as SyncService from "./syncservice.js";
 export {
     AppService,
@@ -13,6 +14,7 @@ export {
     EventsService,
     MetaService,
     SettingsService,
+    SleepService,
     SyncService
 };
 

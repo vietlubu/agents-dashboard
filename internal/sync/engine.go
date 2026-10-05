@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/vietlubu/agents-dashboard/internal/config"
@@ -111,6 +112,11 @@ type Engine struct {
 	cancel  context.CancelFunc
 	last    *RunSummary
 
+	// lastChangedAt is the wall-clock time of the last run that wrote something. It is
+	// the sleep controller's "an agent just wrote" signal; atomic because the controller
+	// reads it from its own goroutine while a scan is running.
+	lastChangedAt atomic.Int64
+
 	// checkedRollups records that the rollup invariant has been verified in this process.
 	// The check costs a scan of the event table, so it runs on the first completed run and
 	// then only after a run that wrote something — which is exactly when drift can appear.
@@ -150,6 +156,11 @@ func (e *Engine) LastRun() *RunSummary {
 	out := *e.last
 	return &out
 }
+
+// LastChangedAt returns the Unix-millisecond time of the last run that inserted or updated
+// an event, or 0 before any such run. The sleep controller uses it as a file-activity
+// signal that does not depend on the store being queried mid-scan.
+func (e *Engine) LastChangedAt() int64 { return e.lastChangedAt.Load() }
 
 // Cancel stops an in-flight scan. The next scan resumes from the stored cursors, so a
 // cancelled run only loses the work since its last committed batch.
@@ -273,6 +284,7 @@ func (e *Engine) Run(ctx context.Context, trigger string) (RunSummary, error) {
 		DurationMs: summary.DurationMs, Cold: summary.Cold,
 	})
 	if summary.EventsInserted+summary.EventsUpdated > 0 {
+		e.lastChangedAt.Store(time.Now().UnixMilli())
 		e.notify(EventData, DataChangedEvent{})
 	}
 	e.notify(EventState, StateEvent{Running: false, Trigger: trigger})

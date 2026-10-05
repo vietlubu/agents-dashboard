@@ -854,6 +854,32 @@ func (d *DB) Realtime(ctx context.Context, minutes int, loc *time.Location) (Rea
 	return out, nil
 }
 
+// LatestActivityMs is the newest moment any harness recorded activity: the later of the
+// last session update and the last usage event. It is the sleep controller's "file/DB just
+// changed" signal, deliberately independent of whether the write produced a new event.
+func (d *DB) LatestActivityMs(ctx context.Context) (int64, error) {
+	var sessions, events int64
+	if err := d.r.QueryRowContext(ctx, `SELECT COALESCE(MAX(updated_at), 0) FROM sessions`).Scan(&sessions); err != nil {
+		return 0, err
+	}
+	if err := d.r.QueryRowContext(ctx, `SELECT COALESCE(MAX(ts), 0) FROM usage_events`).Scan(&events); err != nil {
+		return 0, err
+	}
+	if events > sessions {
+		return events, nil
+	}
+	return sessions, nil
+}
+
+// ActiveSessionCount counts sessions whose last update falls inside the window, which is
+// the sleep controller's view of "how many agents are still working".
+func (d *DB) ActiveSessionCount(ctx context.Context, sinceMs int64) (int64, error) {
+	var n int64
+	err := d.r.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sessions WHERE updated_at >= ?`, sinceMs).Scan(&n)
+	return n, err
+}
+
 // UnpricedModels lists models that have usage but no price, so the UI can offer to add
 // a rate instead of silently showing nothing.
 func (d *DB) UnpricedModels(ctx context.Context) ([]string, error) {

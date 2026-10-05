@@ -3,17 +3,28 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"net/http"
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/vietlubu/agents-dashboard/internal/service"
+	"github.com/vietlubu/agents-dashboard/internal/sleep"
+	"github.com/vietlubu/agents-dashboard/internal/store"
 	appupdate "github.com/vietlubu/agents-dashboard/internal/update"
 	"github.com/vietlubu/agents-dashboard/internal/version"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/updater"
 )
+
+// mainWindow is the single desktop window, kept so the menu bar can reveal it again after
+// the user has closed or hidden it.
+var mainWindow *application.WebviewWindow
 
 // openMainWindow creates the desktop window. In server mode this file is not compiled:
 // server builds create browser windows internally, and asking for a native window would
@@ -28,8 +39,352 @@ func openMainWindow(app *application.App) {
 		BackgroundColour: application.NewRGB(20, 22, 26),
 		URL:              "/",
 	})
+	mainWindow = window
 	window.Center()
 	window.Show()
+}
+
+// trayRefreshTick is how often the menu bar re-reads today's totals and the sleep status.
+// The values change on scan boundaries, so a slow poll is enough and costs one aggregate
+// read and a status snapshot.
+const trayRefreshTick = 30 * time.Second
+
+// trayLabels are the menu-bar strings for one locale. The tray lives in Go, outside the
+// Vue i18n bundle, so it carries its own small table and follows settings.locale.
+type trayLabels struct {
+	title, keepAwake, display, lid     string
+	usage, total, input, cache, output string
+	status, show, quit                 string
+
+	stUnsupported, stDisabled, stActive string
+	stGrace, stWaitingUser, stSleeping  string
+	stIdle                              string
+}
+
+func trayLabelsFor(locale string) trayLabels {
+	if locale == "vi" {
+		return trayLabels{
+			title:     "Agents Dashboard",
+			keepAwake: "Gi\u1eef m\u00e1y th\u1ee9c khi c\u00f3 agent ho\u1ea1t \u0111\u1ed9ng",
+			display:   "Ch\u1ed1ng sleep m\u00e0n h\u00ecnh",
+			lid:       "Gi\u1eef m\u00e1y ch\u1ea1y khi g\u1eadp n\u1eafp",
+			usage:     "Token h\u00f4m nay",
+			total:     "T\u1ed5ng (input+output): ",
+			input:     "Input: ",
+			cache:     "Input cache: ",
+			output:    "Output: ",
+			status:    "Tr\u1ea1ng th\u00e1i: ",
+			show:      "M\u1edf Dashboard",
+			quit:      "Tho\u00e1t",
+
+			stUnsupported: "kh\u00f4ng h\u1ed7 tr\u1ee3 tr\u00ean h\u1ec7 \u0111i\u1ec1u h\u00e0nh n\u00e0y",
+			stDisabled:    "\u0111ang t\u1eaft",
+			stActive:      "\u0111ang gi\u1eef m\u00e1y th\u1ee9c",
+			stGrace:       "ch\u1edd sleep",
+			stWaitingUser: "ch\u1edd ng\u01b0\u1eddi d\u00f9ng r\u1eddi m\u00e1y",
+			stSleeping:    "\u0111ang sleep",
+			stIdle:        "kh\u00f4ng ho\u1ea1t \u0111\u1ed9ng",
+		}
+	}
+	return trayLabels{
+		title:     "Agents Dashboard",
+		keepAwake: "Keep awake while an agent is active",
+		display:   "Prevent display sleep",
+		lid:       "Prevent sleep with the lid closed",
+		usage:     "Session usage (today)",
+		total:     "Total (input+output): ",
+		input:     "Input: ",
+		cache:     "Input cache: ",
+		output:    "Output: ",
+		status:    "Status: ",
+		show:      "Open Dashboard",
+		quit:      "Quit",
+
+		stUnsupported: "not supported on this platform",
+		stDisabled:    "off",
+		stActive:      "holding the machine awake",
+		stGrace:       "countdown to sleep",
+		stWaitingUser: "waiting for the user to step away",
+		stSleeping:    "sleeping",
+		stIdle:        "idle",
+	}
+}
+
+// tray owns the menu-bar status item: the sleep toggles and today's usage. macOS shows it
+// in the menu bar; Windows in the notification area; Linux in the app indicator when a
+// tray host is present.
+type tray struct {
+	app      *application.App
+	sleepSvc *service.SleepService
+	setSvc   *service.SettingsService
+
+	item  *application.SystemTray
+	title *application.MenuItem
+	usage *application.Menu
+	show  *application.MenuItem
+	quit  *application.MenuItem
+
+	keepAwake *application.MenuItem
+	dispSleep *application.MenuItem
+	lidSleep  *application.MenuItem
+	status    *application.MenuItem
+	total     *application.MenuItem
+	input     *application.MenuItem
+	cache     *application.MenuItem
+	output    *application.MenuItem
+
+	locale string
+	labels trayLabels
+	busy   bool
+}
+
+// setupTray creates the menu bar (desktop builds only). A duplicate registration would
+// error, so it is created exactly once from main.
+func setupTray(app *application.App, setSvc *service.SettingsService, sleepSvc *service.SleepService) {
+	t := &tray{app: app, sleepSvc: sleepSvc, setSvc: setSvc}
+	t.locale = t.localeOf()
+	t.labels = trayLabelsFor(t.locale)
+	l := t.labels
+
+	menu := application.NewMenu()
+	t.title = menu.Add(l.title)
+	t.title.SetEnabled(false)
+	menu.AddSeparator()
+
+	t.keepAwake = menu.AddCheckbox(l.keepAwake, false)
+	t.dispSleep = menu.AddCheckbox(l.display, true)
+	t.lidSleep = menu.AddCheckbox(l.lid, false)
+	t.keepAwake.OnClick(func(*application.Context) { t.toggleSleepEnabled() })
+	t.dispSleep.OnClick(func(*application.Context) { t.toggleDisplay() })
+	t.lidSleep.OnClick(func(*application.Context) { t.toggleLid() })
+
+	menu.AddSeparator()
+	t.usage = menu.AddSubmenu(l.usage)
+	t.total = t.usage.Add(l.total + "-")
+	t.input = t.usage.Add(l.input + "-")
+	t.cache = t.usage.Add(l.cache + "-")
+	t.output = t.usage.Add(l.output + "-")
+	for _, item := range []*application.MenuItem{t.total, t.input, t.cache, t.output} {
+		item.SetEnabled(false)
+	}
+
+	menu.AddSeparator()
+	t.status = menu.Add(l.status + "-")
+	t.status.SetEnabled(false)
+	t.show = menu.Add(l.show)
+	t.show.OnClick(func(*application.Context) {
+		if mainWindow != nil {
+			mainWindow.Show().Focus()
+		}
+	})
+	menu.AddSeparator()
+	t.quit = menu.Add(l.quit)
+	t.quit.OnClick(func(*application.Context) { t.app.Quit() })
+
+	t.item = t.app.SystemTray.New()
+	if icon := trayIcon(); len(icon) > 0 {
+		t.item.SetTemplateIcon(icon)
+	}
+	t.item.SetMenu(menu)
+
+	t.refresh()
+	go t.loop()
+}
+
+func (t *tray) loop() {
+	ticker := time.NewTicker(trayRefreshTick)
+	defer ticker.Stop()
+	for range ticker.C {
+		t.refresh()
+	}
+}
+
+// localeOf reads the configured locale, defaulting to English.
+func (t *tray) localeOf() string {
+	s, err := t.setSvc.Get()
+	if err != nil || s.Locale == "" {
+		return "en"
+	}
+	return s.Locale
+}
+
+// current reads the effective settings, returning nil when they cannot be read.
+func (t *tray) current() *store.Settings {
+	s, err := t.setSvc.Get()
+	if err != nil {
+		return nil
+	}
+	return &s
+}
+
+func (t *tray) toggleSleepEnabled() {
+	s := t.current()
+	if s == nil {
+		return
+	}
+	s.SleepEnabled = !s.SleepEnabled
+	t.save(*s)
+}
+
+func (t *tray) toggleDisplay() {
+	s := t.current()
+	if s == nil {
+		return
+	}
+	s.PreventDisplaySleep = !s.PreventDisplaySleep
+	t.save(*s)
+}
+
+func (t *tray) toggleLid() {
+	s := t.current()
+	if s == nil {
+		return
+	}
+	s.PreventLidClosedSleep = !s.PreventLidClosedSleep
+	t.save(*s)
+}
+
+// save persists the three sleep toggles as one patch and refreshes the menu bar. The busy
+// flag stops the periodic refresh from fighting an in-flight toggle.
+func (t *tray) save(s store.Settings) {
+	t.busy = true
+	_, err := t.setSvc.Update(store.SettingsPatch{
+		SleepEnabled:          &s.SleepEnabled,
+		PreventDisplaySleep:   &s.PreventDisplaySleep,
+		PreventLidClosedSleep: &s.PreventLidClosedSleep,
+	})
+	t.busy = false
+	if err != nil {
+		return
+	}
+	t.refresh()
+}
+
+// refresh repaints the menu bar from the persisted settings, the controller status and
+// today's totals. A locale change rewrites the static labels too.
+func (t *tray) refresh() {
+	if t.busy {
+		return
+	}
+	s := t.current()
+	if s != nil {
+		t.applyLabels(s.Locale)
+		t.keepAwake.SetChecked(s.SleepEnabled)
+		t.dispSleep.SetChecked(s.PreventDisplaySleep)
+		t.lidSleep.SetChecked(s.PreventLidClosedSleep)
+	}
+
+	l := t.labels
+	st := t.sleepSvc.Status()
+	t.status.SetLabel(l.status + t.statusText(st))
+
+	tot, err := t.sleepSvc.Today()
+	if err != nil {
+		return
+	}
+	t.total.SetLabel(l.total + compactTokens(tot.Input+tot.Output))
+	t.input.SetLabel(l.input + compactTokens(tot.Input))
+	t.cache.SetLabel(fmt.Sprintf("%s%s (hit %.1f%%)", l.cache, compactTokens(tot.CacheRead), cacheHitRate(tot)))
+	t.output.SetLabel(l.output + compactTokens(tot.Output))
+	// Show the day's total in the menu bar itself; nothing to show means the icon alone.
+	if tokens := tot.Input + tot.Output; tokens > 0 {
+		t.item.SetLabel(compactTokens(tokens))
+	} else {
+		t.item.SetLabel("")
+	}
+}
+
+// applyLabels rewrites the static menu labels when the configured locale changes.
+func (t *tray) applyLabels(locale string) {
+	if locale == "" {
+		locale = "en"
+	}
+	if locale == t.locale {
+		return
+	}
+	t.locale = locale
+	t.labels = trayLabelsFor(locale)
+	l := t.labels
+	t.title.SetLabel(l.title)
+	t.keepAwake.SetLabel(l.keepAwake)
+	t.dispSleep.SetLabel(l.display)
+	t.lidSleep.SetLabel(l.lid)
+	t.usage.SetLabel(l.usage)
+	t.show.SetLabel(l.show)
+	t.quit.SetLabel(l.quit)
+}
+
+func (t *tray) statusText(st sleep.Status) string {
+	l := t.labels
+	if !st.Supported {
+		return l.stUnsupported
+	}
+	if !st.Enabled {
+		return l.stDisabled
+	}
+	switch st.Detail {
+	case "active":
+		return l.stActive
+	case "grace":
+		if st.SleepAtMs > 0 {
+			return l.stGrace + " " + time.UnixMilli(st.SleepAtMs).Format("15:04")
+		}
+		return l.stGrace
+	case "waiting-user":
+		return l.stWaitingUser
+	case "sleeping":
+		return l.stSleeping
+	default:
+		return l.stIdle
+	}
+}
+
+// cacheHitRate is the share of prompt tokens served from cache: cache reads over all
+// prompt tokens (fresh input plus cache reads and writes). Zero when nothing was asked.
+func cacheHitRate(t store.Totals) float64 {
+	denom := t.Input + t.CacheRead + t.CacheWrite
+	if denom <= 0 {
+		return 0
+	}
+	return float64(t.CacheRead) / float64(denom) * 100
+}
+
+// compactTokens renders a token count as a short menu-bar label.
+func compactTokens(n int64) string {
+	switch {
+	case n >= 1_000_000_000:
+		return strconv.FormatFloat(float64(n)/1e9, 'f', 1, 64) + "B"
+	case n >= 1_000_000:
+		return strconv.FormatFloat(float64(n)/1e6, 'f', 1, 64) + "M"
+	case n >= 1_000:
+		return strconv.FormatFloat(float64(n)/1e3, 'f', 1, 64) + "k"
+	default:
+		return strconv.FormatInt(n, 10)
+	}
+}
+
+// trayIcon draws a small monochrome template icon (a filled ring) so the status item is
+// visible next to the text label. macOS recolors a template icon for light and dark menu
+// bars; the other platforms simply show it as-is.
+func trayIcon() []byte {
+	const size = 22
+	img := image.NewRGBA(image.Rect(0, 0, size, size))
+	cx, cy := 11.0, 11.0
+	outer, inner := 9.0, 5.0
+	for y := 0; y < size; y++ {
+		for x := 0; x < size; x++ {
+			dx, dy := float64(x)+0.5-cx, float64(y)+0.5-cy
+			dist := dx*dx + dy*dy
+			if dist <= outer*outer && dist >= inner*inner {
+				img.SetRGBA(x, y, color.RGBA{R: 0, G: 0, B: 0, A: 255})
+			}
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return nil
+	}
+	return buf.Bytes()
 }
 
 // configureUpdater leaves development and unsupported builds offline. Release

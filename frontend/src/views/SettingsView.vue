@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import GeneralCard from "@/views/settings/GeneralCard.vue";
+import SleepCard from "@/views/settings/SleepCard.vue";
 import ScanRootsCard from "@/views/settings/ScanRootsCard.vue";
 import PricingTableCard from "@/views/settings/PricingTableCard.vue";
 import PriceRulesCard from "@/views/settings/PriceRulesCard.vue";
@@ -29,6 +30,7 @@ onMounted(async () => {
     </div>
 
     <GeneralCard />
+    <SleepCard />
     <ScanRootsCard />
     <PricingTableCard />
     <PriceRulesCard />

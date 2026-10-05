@@ -38,6 +38,13 @@ func (s *SettingsService) Get() (store.Settings, error) {
 		ServerPort:     int64(cfg.ServerPort),
 		Theme:          "system",
 		Locale:         "en",
+
+		SleepEnabled:          cfg.SleepEnabled,
+		SleepAfterS:           int64(cfg.SleepAfter / time.Second),
+		SleepActiveWindowS:    int64(cfg.SleepActiveWindow / time.Second),
+		PreventSystemSleep:    cfg.PreventSystemSleep,
+		PreventDisplaySleep:   cfg.PreventDisplaySleep,
+		PreventLidClosedSleep: cfg.PreventLidClosedSleep,
 	}
 
 	if v, ok, err := db.GetSetting(ctx, store.SettingTZ); err != nil {
@@ -94,6 +101,36 @@ func (s *SettingsService) Get() (store.Settings, error) {
 		return out, err
 	} else if ok {
 		out.Locale = v
+	}
+	if v, err := db.SettingBool(ctx, store.SettingSleepEnabled, out.SleepEnabled); err != nil {
+		return out, err
+	} else {
+		out.SleepEnabled = v
+	}
+	if v, err := db.SettingInt(ctx, store.SettingSleepAfterS, out.SleepAfterS); err != nil {
+		return out, err
+	} else {
+		out.SleepAfterS = v
+	}
+	if v, err := db.SettingInt(ctx, store.SettingSleepActiveWindowS, out.SleepActiveWindowS); err != nil {
+		return out, err
+	} else {
+		out.SleepActiveWindowS = v
+	}
+	if v, err := db.SettingBool(ctx, store.SettingPreventSystemSleep, out.PreventSystemSleep); err != nil {
+		return out, err
+	} else {
+		out.PreventSystemSleep = v
+	}
+	if v, err := db.SettingBool(ctx, store.SettingPreventDisplaySleep, out.PreventDisplaySleep); err != nil {
+		return out, err
+	} else {
+		out.PreventDisplaySleep = v
+	}
+	if v, err := db.SettingBool(ctx, store.SettingPreventLidClosedSleep, out.PreventLidClosedSleep); err != nil {
+		return out, err
+	} else {
+		out.PreventLidClosedSleep = v
 	}
 	return out, nil
 }
@@ -164,11 +201,42 @@ func (s *SettingsService) Update(patch store.SettingsPatch) (store.Settings, err
 		}
 	}
 
+	setBool := func(key string, value *bool) error {
+		if value == nil {
+			return nil
+		}
+		return db.SetSetting(ctx, key, strconv.FormatBool(*value))
+	}
+	if err := setBool(store.SettingSleepEnabled, patch.SleepEnabled); err != nil {
+		return store.Settings{}, err
+	}
+	if err := setBool(store.SettingPreventSystemSleep, patch.PreventSystemSleep); err != nil {
+		return store.Settings{}, err
+	}
+	if err := setBool(store.SettingPreventDisplaySleep, patch.PreventDisplaySleep); err != nil {
+		return store.Settings{}, err
+	}
+	if err := setBool(store.SettingPreventLidClosedSleep, patch.PreventLidClosedSleep); err != nil {
+		return store.Settings{}, err
+	}
+	// A sleep delay shorter than 30s would fight the machine's own idle timers; the active
+	// window shorter than 15s would flicker between active and idle.
+	if err := setInt(store.SettingSleepAfterS, patch.SleepAfterS, 30); err != nil {
+		return store.Settings{}, err
+	}
+	if err := setInt(store.SettingSleepActiveWindowS, patch.SleepActiveWindowS, 15); err != nil {
+		return store.Settings{}, err
+	}
+
 	updated, err := s.Get()
 	if err != nil {
 		return store.Settings{}, err
 	}
 	s.applyToConfig(updated)
+	// Reconcile the keep-awake state immediately instead of waiting for the next tick.
+	if s.deps.Sleep != nil {
+		s.deps.Sleep.Kick()
+	}
 	s.deps.emit(EventSettingsSaved, updated)
 
 	if updated.TZ != current.TZ {
@@ -183,14 +251,20 @@ func (s *SettingsService) Update(patch store.SettingsPatch) (store.Settings, err
 // interval change takes effect on the next loop without a restart.
 func (s *SettingsService) applyToConfig(settings store.Settings) {
 	s.deps.Cfg.Apply(config.Mutable{
-		TZ:             settings.TZ,
-		IdleInterval:   time.Duration(settings.IdleIntervalS) * time.Second,
-		BurstInterval:  time.Duration(settings.BurstIntervalS) * time.Second,
-		BurstWindow:    time.Duration(settings.BurstWindowS) * time.Second,
-		Concurrency:    int(settings.Concurrency),
-		ServerHost:     settings.ServerHost,
-		ServerPort:     int(settings.ServerPort),
-		AutoSyncPrices: settings.AutoSyncPrices,
+		TZ:                    settings.TZ,
+		IdleInterval:          time.Duration(settings.IdleIntervalS) * time.Second,
+		BurstInterval:         time.Duration(settings.BurstIntervalS) * time.Second,
+		BurstWindow:           time.Duration(settings.BurstWindowS) * time.Second,
+		Concurrency:           int(settings.Concurrency),
+		ServerHost:            settings.ServerHost,
+		ServerPort:            int(settings.ServerPort),
+		AutoSyncPrices:        settings.AutoSyncPrices,
+		SleepEnabled:          settings.SleepEnabled,
+		SleepAfter:            time.Duration(settings.SleepAfterS) * time.Second,
+		SleepActiveWindow:     time.Duration(settings.SleepActiveWindowS) * time.Second,
+		PreventSystemSleep:    settings.PreventSystemSleep,
+		PreventDisplaySleep:   settings.PreventDisplaySleep,
+		PreventLidClosedSleep: settings.PreventLidClosedSleep,
 	})
 }
 

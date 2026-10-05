@@ -10,6 +10,9 @@ import type { Events } from "@wailsio/runtime";
 import type * as service$0 from "../../../../vietlubu/agents-dashboard/internal/service/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import type * as sleep$0 from "../../../../vietlubu/agents-dashboard/internal/sleep/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import type * as store$0 from "../../../../vietlubu/agents-dashboard/internal/store/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -22,6 +25,7 @@ declare module "@wailsio/runtime" {
             "data:changed": sync$0.DataChangedEvent;
             "pricing:synced": service$0.PricingSyncedPayload;
             "settings:saved": store$0.Settings;
+            "sleep:status": sleep$0.Status;
             "sync:done": sync$0.DoneEvent;
             "sync:error": sync$0.ErrorEvent;
             "sync:progress": sync$0.ProgressEvent;

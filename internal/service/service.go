@@ -15,6 +15,7 @@ import (
 
 	"github.com/vietlubu/agents-dashboard/internal/config"
 	"github.com/vietlubu/agents-dashboard/internal/pricing"
+	"github.com/vietlubu/agents-dashboard/internal/sleep"
 	"github.com/vietlubu/agents-dashboard/internal/store"
 	syncengine "github.com/vietlubu/agents-dashboard/internal/sync"
 	"github.com/vietlubu/agents-dashboard/internal/version"
@@ -31,6 +32,7 @@ const (
 	EventPricingSynced = "pricing:synced"
 	EventSettingsSaved = "settings:saved"
 	EventAppUpdate     = "app:update"
+	EventSleepStatus   = "sleep:status"
 )
 
 // Deps is what every service needs. One instance is shared so all services see the same
@@ -40,6 +42,7 @@ type Deps struct {
 	Cfg                   *config.Config
 	Engine                *syncengine.Engine
 	Scheduler             *syncengine.Scheduler
+	Sleep                 *sleep.Controller
 	Catalog               *pricing.Catalog
 	Log                   *slog.Logger
 	Emit                  func(name string, payload any)
@@ -109,6 +112,9 @@ func (s *AppService) ServiceStartup(ctx context.Context, _ application.ServiceOp
 	if deps.Scheduler != nil {
 		deps.Scheduler.Start(ctx)
 	}
+	if deps.Sleep != nil {
+		deps.Sleep.Start(ctx)
+	}
 	if deps.Cfg != nil {
 		go s.autoSyncPrices(ctx)
 	}
@@ -117,11 +123,15 @@ func (s *AppService) ServiceStartup(ctx context.Context, _ application.ServiceOp
 	return nil
 }
 
-// ServiceShutdown stops the background update and scan loops.
+// ServiceShutdown stops the background update, scan and sleep loops. Stopping the sleep
+// controller also releases every keep-awake assertion it held.
 func (s *AppService) ServiceShutdown() error {
 	s.stopUpdateLoop()
 	if s.deps.Scheduler != nil {
 		s.deps.Scheduler.Stop()
+	}
+	if s.deps.Sleep != nil {
+		s.deps.Sleep.Stop()
 	}
 	return nil
 }

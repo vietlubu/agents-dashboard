@@ -12,6 +12,9 @@ import (
 // window, so there is no native window to create.
 func openMainWindow(*application.App) {}
 
+// setupTray does nothing in server mode: a headless server has no menu bar.
+func setupTray(*application.App, *service.SettingsService, *service.SleepService) {}
+
 // configureUpdater never initializes the desktop engine or requests an update feed.
 func configureUpdater(_ *application.App, deps *service.Deps) error {
 	deps.Updater = nil

@@ -5,6 +5,32 @@ import type * as PricingModels from "@bindings/github.com/vietlubu/agents-dashbo
 
 export type SettingsModel = StoreModels.Settings;
 export type SettingsPatch = StoreModels.SettingsPatch;
+
+// Every SettingsPatch field is required by the generated model, where empty string, zero
+// and null all mean "leave unchanged". settingsPatch fills those sentinels so a caller
+// only writes the fields it actually wants to change.
+const UNCHANGED: SettingsPatch = {
+  tz: "",
+  idleIntervalSeconds: 0,
+  burstIntervalSeconds: 0,
+  concurrency: 0,
+  autoSyncPrices: null,
+  serverHost: "",
+  serverPort: 0,
+  theme: "",
+  locale: "",
+  sleepEnabled: null,
+  preventSystemSleep: null,
+  preventDisplaySleep: null,
+  preventLidClosedSleep: null,
+  sleepAfterSeconds: 0,
+  sleepActiveWindowSeconds: 0,
+};
+
+/** Build a settings patch from a partial, filling unchanged fields with their sentinels. */
+export function settingsPatch(overrides: Partial<SettingsPatch>): SettingsPatch {
+  return { ...UNCHANGED, ...overrides };
+}
 export type ScanRoot = StoreModels.ScanRoot;
 export type ModelPrice = StoreModels.ModelPrice;
 export type PriceRule = StoreModels.PriceRule;

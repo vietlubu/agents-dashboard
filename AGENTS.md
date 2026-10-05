@@ -54,7 +54,8 @@ End-to-end:
 ### Sync events (`internal/service/service.go` ↔ `frontend/src/api/sync.ts` `EVENTS`)
 
 `sync:state`, `sync:progress`, `sync:done`, `sync:error`, `data:changed`,
-`pricing:synced`, `settings:saved`. Keep both sides in sync when adding one.
+`pricing:synced`, `settings:saved`, `sleep:status`. Keep both sides in sync when adding one.
+(`sleep:status` is emitted by the sleep controller, not the sync engine.)
 
 ### Store internals worth knowing
 
@@ -76,6 +77,7 @@ End-to-end:
 | `internal/harness/` | one file per agent adapter (`claude.go`, `codex.go`, `opencode.go`, `pi.go`, `omp.go`, `freebuff.go`, `freebuffdesktop.go`) + shared `sink.go`, `jsonl.go`, `registry.go`, `xtsqlite.go` |
 | `internal/store/` | `schema.go` DDL, `db.go` handles/DSN, `query.go` reads, `rollups.go`, `dto.go` |
 | `internal/sync/` | `engine.go`, `scheduler.go`, `report.go` |
+| `internal/sleep/` | keep-awake controller + per-OS inhibitors/sleepers/idlers (`controller.go`, `monitor.go`, `platform_<os>.go`) |
 | `internal/service/` | Wails bindings: `app/service.go`, `dashboard.go`, `events.go`, `meta.go`, `settings.go`, `sync.go` |
 | `internal/pricing/` | `catalog.go` (atomic snapshot), `sync.go` (downloads), `normalize.go` |
 | `internal/config/` | `config.go`, `paths.go` |
@@ -207,6 +209,7 @@ it touched and commit them in the same turn — never leave finished work sittin
 | `internal/sync/engine.go` | per-run flow, rollup repair, event emission |
 | `internal/sync/scheduler.go` | idle/burst adaptive loop, `TriggerNow` |
 | `internal/config/config.go` | env keys + defaults, `Mutable`, `Snapshot/Apply`, `Warnings` |
+| `window_desktop.go` | desktop window + the menu-bar tray (build-tagged `!server`); the tray polls the sleep status and today's totals |
 | `frontend/src/api/sync.ts` | `EVENTS` map mirroring Go event names |
 | `frontend/src/composables/useLiveQuery.ts` | the only data-fetch pattern in views |
 | `frontend/vite.config.ts` | port 9245, `@` and `@bindings` aliases, wails plugin |

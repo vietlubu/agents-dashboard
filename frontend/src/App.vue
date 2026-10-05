@@ -11,12 +11,14 @@ import { useSettingsStore } from "@/stores/settings";
 import { useSyncStore } from "@/stores/sync";
 import { useFiltersStore } from "@/stores/filters";
 import { useUpdateStore } from "@/stores/update";
+import { useSleepStore } from "@/stores/sleep";
 import { applyTheme } from "@/lib/theme";
 
 const settings = useSettingsStore();
 const sync = useSyncStore();
 const filters = useFiltersStore();
 const update = useUpdateStore();
+const sleep = useSleepStore();
 const { locale } = useI18n();
 const route = useRoute();
 
@@ -28,6 +30,7 @@ const showSyncStatus = computed(() => route.path === "/settings");
 
 onMounted(async () => {
   update.start();
+  sleep.start();
   await settings.load();
   applyTheme(settings.theme);
   locale.value = settings.locale;
@@ -41,7 +44,10 @@ onMounted(async () => {
   void stop;
 });
 
-onUnmounted(() => update.stop());
+onUnmounted(() => {
+  update.stop();
+  sleep.stop();
+});
 </script>
 
 <template>

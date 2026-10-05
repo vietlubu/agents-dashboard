@@ -20,6 +20,14 @@ const (
 	DefaultBurstWindow   = 5 * time.Minute
 	DefaultServerHost    = "localhost"
 	DefaultServerPort    = 8080
+
+	// Sleep control defaults. Keep-awake is opt-in, so the feature starts off; once on,
+	// the system and display are both held awake by default and the machine sleeps five
+	// minutes after the last agent activity.
+	DefaultSleepAfter        = 5 * time.Minute
+	DefaultSleepActiveWindow = 2 * time.Minute
+	DefaultPreventSystem     = true
+	DefaultPreventDisplay    = true
 )
 
 // Mutable holds every field the user can change at runtime from the settings page.
@@ -35,6 +43,16 @@ type Mutable struct {
 	ServerHost     string
 	ServerPort     int
 	AutoSyncPrices bool
+
+	// Sleep control. SleepAfter is how long the machine stays awake after the last
+	// agent activity before it is allowed to sleep; SleepActiveWindow is how recently a
+	// session must have written to count as active.
+	SleepEnabled          bool
+	SleepAfter            time.Duration
+	SleepActiveWindow     time.Duration
+	PreventSystemSleep    bool
+	PreventDisplaySleep   bool
+	PreventLidClosedSleep bool
 }
 
 // Config is the process configuration.
@@ -87,6 +105,13 @@ func Load() (*Config, error) {
 		ServerHost:     envString("AGENTS_DASHBOARD_SERVER_HOST", DefaultServerHost),
 		ServerPort:     envInt("AGENTS_DASHBOARD_SERVER_PORT", DefaultServerPort),
 		AutoSyncPrices: envBool("AGENTS_DASHBOARD_AUTO_SYNC_PRICES", true),
+
+		SleepEnabled:          envBool("AGENTS_DASHBOARD_SLEEP_ENABLED", false),
+		SleepAfter:            envDuration("AGENTS_DASHBOARD_SLEEP_AFTER", DefaultSleepAfter),
+		SleepActiveWindow:     envDuration("AGENTS_DASHBOARD_SLEEP_ACTIVE_WINDOW", DefaultSleepActiveWindow),
+		PreventSystemSleep:    envBool("AGENTS_DASHBOARD_PREVENT_SYSTEM_SLEEP", DefaultPreventSystem),
+		PreventDisplaySleep:   envBool("AGENTS_DASHBOARD_PREVENT_DISPLAY_SLEEP", DefaultPreventDisplay),
+		PreventLidClosedSleep: envBool("AGENTS_DASHBOARD_PREVENT_LID_SLEEP", false),
 	}
 	if c.mutable.Concurrency < 1 {
 		c.mutable.Concurrency = 1
@@ -137,6 +162,17 @@ func (c *Config) Apply(m Mutable) {
 		c.mutable.ServerPort = m.ServerPort
 	}
 	c.mutable.AutoSyncPrices = m.AutoSyncPrices
+
+	c.mutable.SleepEnabled = m.SleepEnabled
+	if m.SleepAfter > 0 {
+		c.mutable.SleepAfter = m.SleepAfter
+	}
+	if m.SleepActiveWindow > 0 {
+		c.mutable.SleepActiveWindow = m.SleepActiveWindow
+	}
+	c.mutable.PreventSystemSleep = m.PreventSystemSleep
+	c.mutable.PreventDisplaySleep = m.PreventDisplaySleep
+	c.mutable.PreventLidClosedSleep = m.PreventLidClosedSleep
 }
 
 // resolveTimezone returns the IANA zone name and its location: an explicit name when given,
