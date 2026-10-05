@@ -4,6 +4,7 @@ package sleep
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -15,9 +16,13 @@ import (
 // PlatformSupported reports that macOS can control sleep.
 func PlatformSupported() bool { return true }
 
-func defaultInhibitor() Inhibitor { return newDarwinInhibitor() }
-func defaultSleeper() Sleeper     { return darwinSleeper{} }
-func defaultIdler() Idler         { return darwinIdler{} }
+func defaultInhibitor() Inhibitor           { return newDarwinInhibitor() }
+func defaultSleeper() Sleeper               { return darwinSleeper{} }
+func defaultDisplaySleeper() DisplaySleeper { return darwinDisplaySleeper{} }
+func defaultScreensaver() ScreensaverStarter {
+	return darwinScreensaver{}
+}
+func defaultIdler() Idler { return darwinIdler{} }
 
 // --- keep-awake ---------------------------------------------------------------
 
@@ -157,6 +162,48 @@ func (darwinSleeper) Sleep() error {
 		return fmt.Errorf("sleep: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// --- display sleep ------------------------------------------------------------
+
+type darwinDisplaySleeper struct{}
+
+// DisplaySleep turns the display off now, leaving the machine running. pmset is present on
+// every macOS install.
+func (darwinDisplaySleeper) DisplaySleep() error {
+	out, err := exec.Command("pmset", "displaysleepnow").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("pmset displaysleepnow: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// --- screensaver --------------------------------------------------------------
+
+type darwinScreensaver struct{}
+
+// saverPaths are the known locations of the screensaver engine. Newer macOS releases moved
+// it out of /Applications, so the fallbacks are tried in order.
+var saverPaths = []string{
+	"/System/Library/CoreServices/ScreenSaverEngine.app",
+	"/Applications/ScreenSaverEngine.app",
+}
+
+// StartScreensaver launches the screensaver engine. It tries the app paths directly before
+// asking LaunchServices by bundle identifier, which is the most portable last resort.
+func (darwinScreensaver) StartScreensaver() error {
+	for _, p := range saverPaths {
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		if err := exec.Command("open", p).Run(); err == nil {
+			return nil
+		}
+	}
+	if err := exec.Command("open", "-b", "com.apple.ScreenSaver.Engine").Run(); err == nil {
+		return nil
+	}
+	return fmt.Errorf("start screensaver: ScreenSaverEngine not found")
 }
 
 // --- user idle ----------------------------------------------------------------

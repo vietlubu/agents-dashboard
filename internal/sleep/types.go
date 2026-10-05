@@ -52,6 +52,17 @@ type Sleeper interface {
 	Sleep() error
 }
 
+// DisplaySleeper turns the display off now without putting the machine to sleep. The
+// display wakes again on the next keypress or pointer move.
+type DisplaySleeper interface {
+	DisplaySleep() error
+}
+
+// ScreensaverStarter switches the session to the screensaver now.
+type ScreensaverStarter interface {
+	StartScreensaver() error
+}
+
 // Idler reports how long the user has been idle and whether it could be measured. A false
 // ok means the platform cannot tell, and the controller then declines to force sleep so it
 // never suspends a machine someone is using.

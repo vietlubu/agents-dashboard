@@ -180,11 +180,18 @@ sleeps after the configured delay — but only if the keyboard and mouse are idl
 desktop in use is never suspended. A session that is open but idle does not hold the machine
 awake, and before any agent has run the feature stays out of the way.
 
-| | Keep-awake | Display | Lid closed | Sleep now |
-|---|---|---|---|---|
-| macOS | `caffeinate -i` | `caffeinate -d` | `caffeinate -s` on AC, or one admin prompt to set `pmset disablesleep` | `pmset sleepnow` |
-| Windows | `SetThreadExecutionState` | `+ ES_DISPLAY_REQUIRED` | no supported API | `SetSuspendState` |
-| Linux | `systemd-inhibit --what=idle:sleep` | best-effort (may be unavailable on Wayland) | `handle-lid-switch` | `systemctl suspend` |
+| | Keep-awake | Display | Lid closed | Sleep now | Display now | Screensaver |
+|---|---|---|---|---|---|---|
+| macOS | `caffeinate -i` | `caffeinate -d` | `caffeinate -s` on AC, or one admin prompt to set `pmset disablesleep` | `pmset sleepnow` | `pmset displaysleepnow` | `ScreenSaverEngine` |
+| Windows | `SetThreadExecutionState` | `+ ES_DISPLAY_REQUIRED` | no supported API | `SetSuspendState` | `SC_MONITORPOWER` broadcast | `SC_SCREENSAVE` broadcast |
+| Linux | `systemd-inhibit --what=idle:sleep` | best-effort (may be unavailable on Wayland) | `handle-lid-switch` | `systemctl suspend` | `xset dpms force off` | `xdg-screensaver activate` |
+
+The menu bar also has three one-shot **actions** below the switches. **Sleep now** suspends
+the machine immediately; when an agent is still working it asks for confirmation first, so a
+stray click cannot cut a session short. **Turn off display** blanks the screen without
+suspending, and **Start screensaver** switches the session to the screensaver. Its
+**Session usage (today)** section and the menu-bar count report every token — input, cache
+reads, cache writes and output — not just input plus output.
 
 The lid-closed switch is the one with a side effect: on macOS, keeping a laptop running with
 the lid closed on battery needs the kernel `SleepDisabled` flag, which asks for an

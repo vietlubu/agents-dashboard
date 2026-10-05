@@ -30,6 +30,20 @@ func (f *fakeSleeper) Sleep() error {
 	return nil
 }
 
+type fakeDisplaySleeper struct{ calls int }
+
+func (f *fakeDisplaySleeper) DisplaySleep() error {
+	f.calls++
+	return nil
+}
+
+type fakeScreensaver struct{ calls int }
+
+func (f *fakeScreensaver) StartScreensaver() error {
+	f.calls++
+	return nil
+}
+
 type fakeIdler struct {
 	idle time.Duration
 	ok   bool
@@ -204,6 +218,69 @@ func TestUnsupportedNeverHolds(t *testing.T) {
 	}
 	if c.Status().Detail != "unsupported" {
 		t.Errorf("detail = %q, want unsupported", c.Status().Detail)
+	}
+}
+
+func TestOneShotActions(t *testing.T) {
+	cfg := newTestConfig(time.Hour, time.Minute)
+	act := &fakeActivity{act: Activity{Active: true}}
+	inh := &fakeInhibitor{}
+	slp := &fakeSleeper{}
+	disp := &fakeDisplaySleeper{}
+	scr := &fakeScreensaver{}
+	c := New(Deps{
+		Cfg: cfg, Activity: act, Inhibitor: inh, Sleeper: slp,
+		DisplaySleeper: disp, Screensaver: scr, Idler: fakeIdler{}, Supported: true, Tick: time.Hour,
+	})
+
+	// Hold an assertion first so SleepNow has one to release.
+	c.tickOnce(context.Background())
+	if !c.Status().KeepingAwake {
+		t.Fatalf("expected to hold while active")
+	}
+
+	if err := c.SleepNow(); err != nil {
+		t.Fatalf("SleepNow: %v", err)
+	}
+	if slp.sleeps != 1 {
+		t.Errorf("sleeper calls = %d, want 1", slp.sleeps)
+	}
+	if inh.released == 0 {
+		t.Errorf("SleepNow did not release the keep-awake assertion")
+	}
+
+	if err := c.DisplaySleepNow(); err != nil || disp.calls != 1 {
+		t.Errorf("DisplaySleepNow err = %v, calls = %d", err, disp.calls)
+	}
+	if err := c.ScreensaverNow(); err != nil || scr.calls != 1 {
+		t.Errorf("ScreensaverNow err = %v, calls = %d", err, scr.calls)
+	}
+}
+
+func TestOneShotActionsUnsupported(t *testing.T) {
+	c := New(Deps{Cfg: newTestConfig(time.Hour, time.Minute), Supported: true, Tick: time.Hour})
+	if err := c.SleepNow(); err == nil {
+		t.Errorf("SleepNow with no sleeper = nil, want error")
+	}
+	if err := c.DisplaySleepNow(); err == nil {
+		t.Errorf("DisplaySleepNow with no display sleeper = nil, want error")
+	}
+	if err := c.ScreensaverNow(); err == nil {
+		t.Errorf("ScreensaverNow with no screensaver = nil, want error")
+	}
+}
+
+func TestActiveNowIgnoresEnabledFlag(t *testing.T) {
+	cfg := newTestConfig(time.Hour, time.Minute)
+	cfg.Apply(config.Mutable{SleepEnabled: false})
+	act := &fakeActivity{act: Activity{Active: true}}
+	c := New(Deps{
+		Cfg: cfg, Activity: act, Inhibitor: &fakeInhibitor{}, Sleeper: &fakeSleeper{},
+		Idler: fakeIdler{}, Supported: true, Tick: time.Hour,
+	})
+
+	if !c.ActiveNow(context.Background()) {
+		t.Errorf("ActiveNow = false while an agent is active and the feature is off, want true")
 	}
 }
 

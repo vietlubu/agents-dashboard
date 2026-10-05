@@ -18,11 +18,27 @@ import * as sleep$0 from "../sleep/models.js";
 import * as store$0 from "../store/models.js";
 
 /**
+ * AgentActive reports whether an agent is working right now, independently of the
+ * auto-sleep setting. The menu bar asks for confirmation before an explicit sleep when it
+ * returns true.
+ */
+export function AgentActive(): $CancellablePromise<boolean> {
+    return $Call.ByID(1048473819);
+}
+
+/**
  * ClamshellSupported reports whether the platform can keep the machine running with the
  * lid closed beyond AC power. Only macOS can, through an administrator prompt.
  */
 export function ClamshellSupported(): $CancellablePromise<boolean> {
     return $Call.ByID(1282718077);
+}
+
+/**
+ * DisplaySleepNow turns the display off now without suspending the machine.
+ */
+export function DisplaySleepNow(): $CancellablePromise<void> {
+    return $Call.ByID(3073358699);
 }
 
 /**
@@ -38,6 +54,21 @@ export function RequestClamshell(): $CancellablePromise<void> {
  */
 export function RestoreClamshell(): $CancellablePromise<void> {
     return $Call.ByID(1234382103);
+}
+
+/**
+ * ScreensaverNow switches the session to the screensaver now.
+ */
+export function ScreensaverNow(): $CancellablePromise<void> {
+    return $Call.ByID(4223286675);
+}
+
+/**
+ * SleepNow puts the machine to sleep immediately. The menu bar asks for confirmation first
+ * when an agent is still working; the service itself only carries out the request.
+ */
+export function SleepNow(): $CancellablePromise<void> {
+    return $Call.ByID(275069061);
 }
 
 /**

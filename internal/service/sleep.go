@@ -48,6 +48,41 @@ func (s *SleepService) RestoreClamshell() error {
 	return s.deps.Sleep.RestoreClamshell()
 }
 
+// AgentActive reports whether an agent is working right now, independently of the
+// auto-sleep setting. The menu bar asks for confirmation before an explicit sleep when it
+// returns true.
+func (s *SleepService) AgentActive() bool {
+	if s.deps.Sleep == nil {
+		return false
+	}
+	return s.deps.Sleep.ActiveNow(context.Background())
+}
+
+// SleepNow puts the machine to sleep immediately. The menu bar asks for confirmation first
+// when an agent is still working; the service itself only carries out the request.
+func (s *SleepService) SleepNow() error {
+	if s.deps.Sleep == nil {
+		return nil
+	}
+	return s.deps.Sleep.SleepNow()
+}
+
+// DisplaySleepNow turns the display off now without suspending the machine.
+func (s *SleepService) DisplaySleepNow() error {
+	if s.deps.Sleep == nil {
+		return nil
+	}
+	return s.deps.Sleep.DisplaySleepNow()
+}
+
+// ScreensaverNow switches the session to the screensaver now.
+func (s *SleepService) ScreensaverNow() error {
+	if s.deps.Sleep == nil {
+		return nil
+	}
+	return s.deps.Sleep.ScreensaverNow()
+}
+
 // Today returns today's token totals in the configured timezone, for the menu bar's usage
 // section and any UI status line.
 func (s *SleepService) Today() (store.Totals, error) {

@@ -15,9 +15,13 @@ import (
 // the lid closed has no supported API; that toggle behaves as "do nothing" here.
 func PlatformSupported() bool { return true }
 
-func defaultInhibitor() Inhibitor { return newWindowsInhibitor() }
-func defaultSleeper() Sleeper     { return windowsSleeper{} }
-func defaultIdler() Idler         { return windowsIdler{} }
+func defaultInhibitor() Inhibitor           { return newWindowsInhibitor() }
+func defaultSleeper() Sleeper               { return windowsSleeper{} }
+func defaultDisplaySleeper() DisplaySleeper { return windowsDisplaySleeper{} }
+func defaultScreensaver() ScreensaverStarter {
+	return windowsScreensaver{}
+}
+func defaultIdler() Idler { return windowsIdler{} }
 
 var (
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
@@ -27,6 +31,7 @@ var (
 	procSetThreadExecutionState = kernel32.NewProc("SetThreadExecutionState")
 	procGetTickCount            = kernel32.NewProc("GetTickCount")
 	procGetLastInputInfo        = user32.NewProc("GetLastInputInfo")
+	procSendMessageW            = user32.NewProc("SendMessageW")
 	procSetSuspendState         = powrprof.NewProc("SetSuspendState")
 )
 
@@ -34,6 +39,11 @@ const (
 	esSystemRequired  = 0x00000001
 	esDisplayRequired = 0x00000002
 	esContinuous      = 0x80000000
+
+	hwndBroadcast  = 0xFFFF
+	wmSysCommand   = 0x0112
+	scMonitorPower = 0xF170
+	scScreenSave   = 0xF140
 )
 
 // --- keep-awake ---------------------------------------------------------------
@@ -116,6 +126,28 @@ func (windowsSleeper) Sleep() error {
 	if r == 0 {
 		return fmt.Errorf("SetSuspendState: %w", err)
 	}
+	return nil
+}
+
+// --- display sleep ------------------------------------------------------------
+
+type windowsDisplaySleeper struct{}
+
+// DisplaySleep broadcasts SC_MONITORPOWER with the "off" argument, which every top-level
+// window honours, turning the display off without suspending the machine.
+func (windowsDisplaySleeper) DisplaySleep() error {
+	procSendMessageW.Call(hwndBroadcast, wmSysCommand, scMonitorPower, 2)
+	return nil
+}
+
+// --- screensaver --------------------------------------------------------------
+
+type windowsScreensaver struct{}
+
+// StartScreensaver broadcasts SC_SCREENSAVE, which starts the user's configured
+// screensaver if one is enabled.
+func (windowsScreensaver) StartScreensaver() error {
+	procSendMessageW.Call(hwndBroadcast, wmSysCommand, scScreenSave, 0)
 	return nil
 }
 

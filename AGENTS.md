@@ -77,7 +77,7 @@ End-to-end:
 | `internal/harness/` | one file per agent adapter (`claude.go`, `codex.go`, `opencode.go`, `pi.go`, `omp.go`, `freebuff.go`, `freebuffdesktop.go`) + shared `sink.go`, `jsonl.go`, `registry.go`, `xtsqlite.go` |
 | `internal/store/` | `schema.go` DDL, `db.go` handles/DSN, `query.go` reads, `rollups.go`, `dto.go` |
 | `internal/sync/` | `engine.go`, `scheduler.go`, `report.go` |
-| `internal/sleep/` | keep-awake controller + per-OS inhibitors/sleepers/idlers (`controller.go`, `monitor.go`, `platform_<os>.go`) |
+| `internal/sleep/` | keep-awake controller + per-OS inhibitors/sleepers/idlers and one-shot sleep/display/screensaver actions (`controller.go`, `monitor.go`, `platform_<os>.go`) |
 | `internal/service/` | Wails bindings: `app/service.go`, `dashboard.go`, `events.go`, `meta.go`, `settings.go`, `sync.go` |
 | `internal/pricing/` | `catalog.go` (atomic snapshot), `sync.go` (downloads), `normalize.go` |
 | `internal/config/` | `config.go`, `paths.go` |
@@ -209,7 +209,7 @@ it touched and commit them in the same turn — never leave finished work sittin
 | `internal/sync/engine.go` | per-run flow, rollup repair, event emission |
 | `internal/sync/scheduler.go` | idle/burst adaptive loop, `TriggerNow` |
 | `internal/config/config.go` | env keys + defaults, `Mutable`, `Snapshot/Apply`, `Warnings` |
-| `window_desktop.go` | desktop window + the menu-bar tray (build-tagged `!server`); the tray polls the sleep status and today's totals |
+| `window_desktop.go` | desktop window + the menu-bar tray (build-tagged `!server`); the tray polls the sleep status and today's all-token totals, and carries the sleep-now/display/screensaver actions |
 | `windowclose_{darwin,other}.go` | macOS close-to-menu-bar: cancels `WindowClosing`, hides the window and switches to the accessory activation policy (no Dock icon) via cgo; no-op elsewhere |
 | `frontend/src/api/sync.ts` | `EVENTS` map mirroring Go event names |
 | `frontend/src/composables/useLiveQuery.ts` | the only data-fetch pattern in views |

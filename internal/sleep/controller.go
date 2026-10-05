@@ -18,15 +18,17 @@ const DefaultTick = 15 * time.Second
 // Deps is what the controller needs. The interfaces are injected so the state machine can
 // be exercised with fakes, and so a server build can run it with no-ops.
 type Deps struct {
-	Cfg       *config.Config
-	Activity  ActivityProvider
-	Inhibitor Inhibitor
-	Sleeper   Sleeper
-	Idler     Idler
-	Supported bool
-	Log       *slog.Logger
-	OnStatus  func(Status)
-	Tick      time.Duration
+	Cfg            *config.Config
+	Activity       ActivityProvider
+	Inhibitor      Inhibitor
+	Sleeper        Sleeper
+	DisplaySleeper DisplaySleeper
+	Screensaver    ScreensaverStarter
+	Idler          Idler
+	Supported      bool
+	Log            *slog.Logger
+	OnStatus       func(Status)
+	Tick           time.Duration
 }
 
 // Controller owns the keep-awake state machine.
@@ -35,15 +37,17 @@ type Deps struct {
 // "last changed" timestamp, and the controller decides from that plus the process list
 // whether to hold the machine awake or let it sleep.
 type Controller struct {
-	cfg       *config.Config
-	activity  ActivityProvider
-	inhibitor Inhibitor
-	sleeper   Sleeper
-	idler     Idler
-	supported bool
-	log       *slog.Logger
-	onStatus  func(Status)
-	tick      time.Duration
+	cfg            *config.Config
+	activity       ActivityProvider
+	inhibitor      Inhibitor
+	sleeper        Sleeper
+	displaySleeper DisplaySleeper
+	screensaver    ScreensaverStarter
+	idler          Idler
+	supported      bool
+	log            *slog.Logger
+	onStatus       func(Status)
+	tick           time.Duration
 
 	mu         sync.Mutex
 	status     Status
@@ -70,18 +74,20 @@ func New(d Deps) *Controller {
 		tick = DefaultTick
 	}
 	c := &Controller{
-		cfg:       d.Cfg,
-		activity:  d.Activity,
-		inhibitor: d.Inhibitor,
-		sleeper:   d.Sleeper,
-		idler:     d.Idler,
-		supported: d.Supported,
-		log:       log,
-		onStatus:  d.OnStatus,
-		tick:      tick,
-		stop:      make(chan struct{}),
-		done:      make(chan struct{}),
-		kick:      make(chan struct{}, 1),
+		cfg:            d.Cfg,
+		activity:       d.Activity,
+		inhibitor:      d.Inhibitor,
+		sleeper:        d.Sleeper,
+		displaySleeper: d.DisplaySleeper,
+		screensaver:    d.Screensaver,
+		idler:          d.Idler,
+		supported:      d.Supported,
+		log:            log,
+		onStatus:       d.OnStatus,
+		tick:           tick,
+		stop:           make(chan struct{}),
+		done:           make(chan struct{}),
+		kick:           make(chan struct{}, 1),
 	}
 	if cc, ok := d.Inhibitor.(ClamshellController); ok {
 		c.clamshell = cc.ClamshellActive()
@@ -161,6 +167,47 @@ func (c *Controller) RestoreClamshell() error {
 	c.mu.Unlock()
 	c.Kick()
 	return nil
+}
+
+// SleepNow puts the machine to sleep immediately, regardless of the automatic state. Any
+// keep-awake assertion is released first so a blocking inhibitor cannot veto the explicit
+// request; the next tick re-applies it if an agent is still working.
+func (c *Controller) SleepNow() error {
+	if c.sleeper == nil {
+		return errUnsupported
+	}
+	c.setHeld(InhibitSpec{})
+	return c.sleeper.Sleep()
+}
+
+// DisplaySleepNow turns the display off now without suspending the machine.
+func (c *Controller) DisplaySleepNow() error {
+	if c.displaySleeper == nil {
+		return errUnsupported
+	}
+	return c.displaySleeper.DisplaySleep()
+}
+
+// ScreensaverNow switches the session to the screensaver now.
+func (c *Controller) ScreensaverNow() error {
+	if c.screensaver == nil {
+		return errUnsupported
+	}
+	return c.screensaver.StartScreensaver()
+}
+
+// ActiveNow reports whether an agent is working right now, independently of whether the
+// automatic sleep feature is enabled. The menu bar uses it to decide whether an explicit
+// Sleep now needs confirmation before it interrupts a running session.
+func (c *Controller) ActiveNow(ctx context.Context) bool {
+	if c.activity == nil {
+		return false
+	}
+	act, err := c.activity.Observe(ctx, c.cfg.Snapshot().SleepActiveWindow)
+	if err != nil {
+		return false
+	}
+	return act.Active
 }
 
 // Status returns a copy of the current state.

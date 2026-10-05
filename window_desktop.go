@@ -56,8 +56,11 @@ const trayRefreshTick = 30 * time.Second
 // Vue i18n bundle, so it carries its own small table and follows settings.locale.
 type trayLabels struct {
 	title, keepAwake, display, lid     string
+	sleepNow, dispNow, screensaver     string
 	usage, total, input, cache, output string
 	status, show, quit                 string
+	confirmTitle, confirmMsg           string
+	confirmSleep, confirmCancel        string
 
 	stUnsupported, stDisabled, stActive string
 	stGrace, stWaitingUser, stSleeping  string
@@ -67,18 +70,25 @@ type trayLabels struct {
 func trayLabelsFor(locale string) trayLabels {
 	if locale == "vi" {
 		return trayLabels{
-			title:     "Agents Dashboard",
-			keepAwake: "Gi\u1eef m\u00e1y th\u1ee9c khi c\u00f3 agent ho\u1ea1t \u0111\u1ed9ng",
-			display:   "Ch\u1ed1ng sleep m\u00e0n h\u00ecnh",
-			lid:       "Gi\u1eef m\u00e1y ch\u1ea1y khi g\u1eadp n\u1eafp",
-			usage:     "Token h\u00f4m nay",
-			total:     "T\u1ed5ng (input+output): ",
-			input:     "Input: ",
-			cache:     "Input cache: ",
-			output:    "Output: ",
-			status:    "Tr\u1ea1ng th\u00e1i: ",
-			show:      "M\u1edf Dashboard",
-			quit:      "Tho\u00e1t",
+			title:         "Agents Dashboard",
+			keepAwake:     "Gi\u1eef m\u00e1y th\u1ee9c khi c\u00f3 agent ho\u1ea1t \u0111\u1ed9ng",
+			display:       "Ch\u1ed1ng sleep m\u00e0n h\u00ecnh",
+			lid:           "Gi\u1eef m\u00e1y ch\u1ea1y khi g\u1eadp n\u1eafp",
+			sleepNow:      "Ng\u1ee7 ngay",
+			dispNow:       "T\u1eaft m\u00e0n h\u00ecnh",
+			screensaver:   "B\u1eadt screensaver",
+			usage:         "Token h\u00f4m nay",
+			total:         "T\u1ed5ng: ",
+			input:         "Input: ",
+			cache:         "Input cache: ",
+			output:        "Output: ",
+			status:        "Tr\u1ea1ng th\u00e1i: ",
+			show:          "M\u1edf Dashboard",
+			quit:          "Tho\u00e1t",
+			confirmTitle:  "Agent v\u1eabn \u0111ang l\u00e0m vi\u1ec7c",
+			confirmMsg:    "C\u00f3 phi\u00ean agent \u0111ang ho\u1ea1t \u0111\u1ed9ng. V\u1eabn sleep?",
+			confirmSleep:  "Sleep",
+			confirmCancel: "Hu\u1ef7",
 
 			stUnsupported: "kh\u00f4ng h\u1ed7 tr\u1ee3 tr\u00ean h\u1ec7 \u0111i\u1ec1u h\u00e0nh n\u00e0y",
 			stDisabled:    "\u0111ang t\u1eaft",
@@ -90,18 +100,25 @@ func trayLabelsFor(locale string) trayLabels {
 		}
 	}
 	return trayLabels{
-		title:     "Agents Dashboard",
-		keepAwake: "Keep awake while an agent is active",
-		display:   "Prevent display sleep",
-		lid:       "Prevent sleep with the lid closed",
-		usage:     "Session usage (today)",
-		total:     "Total (input+output): ",
-		input:     "Input: ",
-		cache:     "Input cache: ",
-		output:    "Output: ",
-		status:    "Status: ",
-		show:      "Open Dashboard",
-		quit:      "Quit",
+		title:         "Agents Dashboard",
+		keepAwake:     "Keep awake while an agent is active",
+		display:       "Prevent display sleep",
+		lid:           "Prevent sleep with the lid closed",
+		sleepNow:      "Sleep now",
+		dispNow:       "Turn off display",
+		screensaver:   "Start screensaver",
+		usage:         "Session usage (today)",
+		total:         "Total (all tokens): ",
+		input:         "Input: ",
+		cache:         "Input cache: ",
+		output:        "Output: ",
+		status:        "Status: ",
+		show:          "Open Dashboard",
+		quit:          "Quit",
+		confirmTitle:  "An agent is still working",
+		confirmMsg:    "An agent session is active. Sleep anyway?",
+		confirmSleep:  "Sleep",
+		confirmCancel: "Cancel",
 
 		stUnsupported: "not supported on this platform",
 		stDisabled:    "off",
@@ -127,14 +144,17 @@ type tray struct {
 	show  *application.MenuItem
 	quit  *application.MenuItem
 
-	keepAwake *application.MenuItem
-	dispSleep *application.MenuItem
-	lidSleep  *application.MenuItem
-	status    *application.MenuItem
-	total     *application.MenuItem
-	input     *application.MenuItem
-	cache     *application.MenuItem
-	output    *application.MenuItem
+	keepAwake   *application.MenuItem
+	dispSleep   *application.MenuItem
+	lidSleep    *application.MenuItem
+	sleepNow    *application.MenuItem
+	dispNow     *application.MenuItem
+	screensaver *application.MenuItem
+	status      *application.MenuItem
+	total       *application.MenuItem
+	input       *application.MenuItem
+	cache       *application.MenuItem
+	output      *application.MenuItem
 
 	locale string
 	labels trayLabels
@@ -160,6 +180,14 @@ func setupTray(app *application.App, setSvc *service.SettingsService, sleepSvc *
 	t.keepAwake.OnClick(func(*application.Context) { t.toggleSleepEnabled() })
 	t.dispSleep.OnClick(func(*application.Context) { t.toggleDisplay() })
 	t.lidSleep.OnClick(func(*application.Context) { t.toggleLid() })
+
+	menu.AddSeparator()
+	t.sleepNow = menu.Add(l.sleepNow)
+	t.dispNow = menu.Add(l.dispNow)
+	t.screensaver = menu.Add(l.screensaver)
+	t.sleepNow.OnClick(func(*application.Context) { t.requestSleepNow() })
+	t.dispNow.OnClick(func(*application.Context) { t.displaySleepNow() })
+	t.screensaver.OnClick(func(*application.Context) { t.startScreensaver() })
 
 	menu.AddSeparator()
 	t.usage = menu.AddSubmenu(l.usage)
@@ -249,6 +277,37 @@ func (t *tray) toggleLid() {
 	t.save(*s)
 }
 
+// requestSleepNow puts the machine to sleep on demand. When an agent is still working it
+// asks first, so a stray menu click cannot cut a running session short. The activity check
+// lists processes, so it runs off the UI thread; the dialog marshals itself back.
+func (t *tray) requestSleepNow() {
+	go func() {
+		if t.sleepSvc.AgentActive() {
+			t.confirmSleepNow()
+			return
+		}
+		_ = t.sleepSvc.SleepNow()
+	}()
+}
+
+// confirmSleepNow asks whether to sleep while an agent is working, then sleeps only on the
+// affirmative button.
+func (t *tray) confirmSleepNow() {
+	l := t.labels
+	dlg := t.app.Dialog.Question()
+	dlg.SetTitle(l.confirmTitle)
+	dlg.SetMessage(l.confirmMsg)
+	dlg.AddButton(l.confirmSleep).OnClick(func() { _ = t.sleepSvc.SleepNow() })
+	dlg.AddButton(l.confirmCancel).SetAsCancel()
+	dlg.Show()
+}
+
+// displaySleepNow turns the display off without suspending the machine.
+func (t *tray) displaySleepNow() { _ = t.sleepSvc.DisplaySleepNow() }
+
+// startScreensaver switches the session to the screensaver.
+func (t *tray) startScreensaver() { _ = t.sleepSvc.ScreensaverNow() }
+
 // save persists the three sleep toggles as one patch and refreshes the menu bar. The busy
 // flag stops the periodic refresh from fighting an in-flight toggle.
 func (t *tray) save(s store.Settings) {
@@ -287,12 +346,13 @@ func (t *tray) refresh() {
 	if err != nil {
 		return
 	}
-	t.total.SetLabel(l.total + compactTokens(tot.Input+tot.Output))
+	t.total.SetLabel(l.total + compactTokens(tot.Total))
 	t.input.SetLabel(l.input + compactTokens(tot.Input))
 	t.cache.SetLabel(fmt.Sprintf("%s%s (hit %.1f%%)", l.cache, compactTokens(tot.CacheRead), cacheHitRate(tot)))
 	t.output.SetLabel(l.output + compactTokens(tot.Output))
-	// Show the day's total in the menu bar itself; nothing to show means the icon alone.
-	if tokens := tot.Input + tot.Output; tokens > 0 {
+	// Show the all-in day total in the menu bar itself; nothing to show means the icon
+	// alone.
+	if tokens := tot.Total; tokens > 0 {
 		t.item.SetLabel(compactTokens(tokens))
 	} else {
 		t.item.SetLabel("")
@@ -314,6 +374,9 @@ func (t *tray) applyLabels(locale string) {
 	t.keepAwake.SetLabel(l.keepAwake)
 	t.dispSleep.SetLabel(l.display)
 	t.lidSleep.SetLabel(l.lid)
+	t.sleepNow.SetLabel(l.sleepNow)
+	t.dispNow.SetLabel(l.dispNow)
+	t.screensaver.SetLabel(l.screensaver)
 	t.usage.SetLabel(l.usage)
 	t.show.SetLabel(l.show)
 	t.quit.SetLabel(l.quit)

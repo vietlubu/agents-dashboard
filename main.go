@@ -77,13 +77,15 @@ func main() {
 	var app *application.App
 	platform := sleep.DefaultPlatform()
 	controller := sleep.New(sleep.Deps{
-		Cfg:       cfg,
-		Activity:  sleep.NewMonitor(db, engine.LastChangedAt, platform.Processes),
-		Inhibitor: platform.Inhibitor,
-		Sleeper:   platform.Sleeper,
-		Idler:     platform.Idler,
-		Supported: platform.Supported,
-		Log:       logger,
+		Cfg:            cfg,
+		Activity:       sleep.NewMonitor(db, engine.LastChangedAt, platform.Processes),
+		Inhibitor:      platform.Inhibitor,
+		Sleeper:        platform.Sleeper,
+		DisplaySleeper: platform.DisplaySleeper,
+		Screensaver:    platform.Screensaver,
+		Idler:          platform.Idler,
+		Supported:      platform.Supported,
+		Log:            logger,
 		OnStatus: func(st sleep.Status) {
 			if app != nil {
 				app.Event.Emit(service.EventSleepStatus, st)

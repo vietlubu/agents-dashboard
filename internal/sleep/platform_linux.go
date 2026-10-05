@@ -16,9 +16,13 @@ import (
 // sleep is not covered; see the package documentation.
 func PlatformSupported() bool { return true }
 
-func defaultInhibitor() Inhibitor { return &linuxInhibitor{} }
-func defaultSleeper() Sleeper     { return linuxSleeper{} }
-func defaultIdler() Idler         { return linuxIdler{} }
+func defaultInhibitor() Inhibitor           { return &linuxInhibitor{} }
+func defaultSleeper() Sleeper               { return linuxSleeper{} }
+func defaultDisplaySleeper() DisplaySleeper { return linuxDisplaySleeper{} }
+func defaultScreensaver() ScreensaverStarter {
+	return linuxScreensaver{}
+}
+func defaultIdler() Idler { return linuxIdler{} }
 
 // --- keep-awake ---------------------------------------------------------------
 
@@ -92,6 +96,51 @@ func (linuxSleeper) Sleep() error {
 		return fmt.Errorf("systemctl suspend: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// --- display sleep ------------------------------------------------------------
+
+type linuxDisplaySleeper struct{}
+
+// DisplaySleep turns the display off now on X11 through DPMS. Under Wayland there is no
+// portable equivalent, so this is best-effort and reports failure when xset is absent.
+func (linuxDisplaySleeper) DisplaySleep() error {
+	if _, err := exec.LookPath("xset"); err != nil {
+		return fmt.Errorf("xset not available: %w", err)
+	}
+	out, err := exec.Command("xset", "dpms", "force", "off").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("xset dpms force off: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// --- screensaver --------------------------------------------------------------
+
+type linuxScreensaver struct{}
+
+// StartScreensaver activates the session screensaver, trying the freedesktop helper first
+// and then the GNOME-specific command and D-Bus method.
+func (linuxScreensaver) StartScreensaver() error {
+	if _, err := exec.LookPath("xdg-screensaver"); err == nil {
+		if err := exec.Command("xdg-screensaver", "activate").Run(); err == nil {
+			return nil
+		}
+	}
+	if _, err := exec.LookPath("gnome-screensaver-command"); err == nil {
+		if err := exec.Command("gnome-screensaver-command", "-a").Run(); err == nil {
+			return nil
+		}
+	}
+	if _, err := exec.LookPath("gdbus"); err == nil {
+		if err := exec.Command("gdbus", "call", "--session",
+			"--dest", "org.gnome.ScreenSaver",
+			"--object-path", "/org/gnome/ScreenSaver",
+			"--method", "org.gnome.ScreenSaver.SetActive", "true").Run(); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("start screensaver: no supported helper found")
 }
 
 // --- user idle ----------------------------------------------------------------
