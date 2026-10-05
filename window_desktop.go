@@ -40,6 +40,9 @@ func openMainWindow(app *application.App) {
 		URL:              "/",
 	})
 	mainWindow = window
+	// On macOS, closing the window hides it and drops the Dock icon; the tray brings it
+	// back. Elsewhere this is a no-op and closing keeps the platform's own behaviour.
+	installWindowCloseBehavior(window)
 	window.Center()
 	window.Show()
 }
@@ -174,6 +177,8 @@ func setupTray(app *application.App, setSvc *service.SettingsService, sleepSvc *
 	t.show = menu.Add(l.show)
 	t.show.OnClick(func(*application.Context) {
 		if mainWindow != nil {
+			// Reopen from the menu bar: restore the Dock icon, then bring the window back.
+			setDockIconVisible(true)
 			mainWindow.Show().Focus()
 		}
 	})

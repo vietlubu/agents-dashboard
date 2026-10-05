@@ -192,6 +192,13 @@ administrator password **once** and stays set system-wide until you press **Rest
 sleep**. Declining the prompt falls back to `caffeinate -s`, which only works on AC power.
 The headless server build has no menu bar and never asserts sleep control.
 
+On macOS the window's close button **hides the app into the menu bar**: the window is hidden
+rather than destroyed, the Dock tile and application menu disappear (the app switches to the
+accessory activation policy), and the menu bar icon keeps running. **Open Dashboard** in the
+menu bar restores the Dock icon and brings the window back; the app only exits through the
+tray's **Quit** or Cmd+Q. On Windows and Linux closing the window keeps its usual behaviour
+(quit on the last window).
+
 ## CLI scan report
 
 ```bash

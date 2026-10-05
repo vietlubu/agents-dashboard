@@ -210,6 +210,7 @@ it touched and commit them in the same turn — never leave finished work sittin
 | `internal/sync/scheduler.go` | idle/burst adaptive loop, `TriggerNow` |
 | `internal/config/config.go` | env keys + defaults, `Mutable`, `Snapshot/Apply`, `Warnings` |
 | `window_desktop.go` | desktop window + the menu-bar tray (build-tagged `!server`); the tray polls the sleep status and today's totals |
+| `windowclose_{darwin,other}.go` | macOS close-to-menu-bar: cancels `WindowClosing`, hides the window and switches to the accessory activation policy (no Dock icon) via cgo; no-op elsewhere |
 | `frontend/src/api/sync.ts` | `EVENTS` map mirroring Go event names |
 | `frontend/src/composables/useLiveQuery.ts` | the only data-fetch pattern in views |
 | `frontend/vite.config.ts` | port 9245, `@` and `@bindings` aliases, wails plugin |

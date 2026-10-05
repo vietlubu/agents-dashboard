@@ -129,7 +129,10 @@ func main() {
 			Port: cfg.Snapshot().ServerPort,
 		},
 		Mac: application.MacOptions{
-			ApplicationShouldTerminateAfterLastWindowClosed: true,
+			// Closing the window hides the app into the menu bar (see
+			// installWindowCloseBehavior), so it must not terminate with the last window.
+			// Quit is explicit: the tray's Quit item or Cmd+Q.
+			ApplicationShouldTerminateAfterLastWindowClosed: false,
 		},
 	})
 	engine.SetEmitter(deps.Emit)
