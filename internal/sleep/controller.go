@@ -55,7 +55,10 @@ type Controller struct {
 	idleSince  time.Time
 	seenActive bool
 	clamshell  bool
-	lastErr    string
+	// clamshellFailed latches after a failed restore so a declined administrator prompt
+	// is not repeated on every tick.
+	clamshellFailed bool
+	lastErr         string
 
 	stop     chan struct{}
 	done     chan struct{}
@@ -148,6 +151,7 @@ func (c *Controller) RequestClamshell() error {
 	}
 	c.mu.Lock()
 	c.clamshell = true
+	c.clamshellFailed = false
 	c.mu.Unlock()
 	c.Kick()
 	return nil
@@ -164,6 +168,7 @@ func (c *Controller) RestoreClamshell() error {
 	}
 	c.mu.Lock()
 	c.clamshell = false
+	c.clamshellFailed = false
 	c.mu.Unlock()
 	c.Kick()
 	return nil
@@ -175,6 +180,13 @@ func (c *Controller) RestoreClamshell() error {
 func (c *Controller) SleepNow() error {
 	if c.sleeper == nil {
 		return errUnsupported
+	}
+	// The clamshell flag blocks every sleep request, the user's own included, so it has to
+	// go before an explicit sleep can take effect.
+	if c.clamshellActive() {
+		if err := c.RestoreClamshell(); err != nil {
+			return err
+		}
 	}
 	c.setHeld(InhibitSpec{})
 	return c.sleeper.Sleep()
@@ -238,6 +250,7 @@ func (c *Controller) loop(ctx context.Context) {
 
 func (c *Controller) tickOnce(ctx context.Context) {
 	snap := c.cfg.Snapshot()
+	c.syncClamshell(snap.SleepEnabled && snap.PreventLidClosedSleep)
 	st := Status{
 		Enabled:   snap.SleepEnabled,
 		Supported: c.supported,
@@ -336,6 +349,27 @@ func (c *Controller) tickOnce(ctx context.Context) {
 		c.idleSince = time.Now()
 		c.mu.Unlock()
 	}
+}
+
+// syncClamshell clears the machine-wide clamshell flag once the setting that asked for it is
+// off. Without this the flag outlives the setting and blocks every sleep, including the
+// user's own.
+func (c *Controller) syncClamshell(enabled bool) {
+	if !c.clamshellActive() || enabled || c.clamshellFailed {
+		return
+	}
+	if err := c.RestoreClamshell(); err != nil {
+		c.log.Warn("restore clamshell", "error", err)
+		c.mu.Lock()
+		c.clamshellFailed = true
+		c.mu.Unlock()
+	}
+}
+
+func (c *Controller) clamshellActive() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.clamshell
 }
 
 // setHeld reconciles the OS with spec, remembering what was asked for so a repeated tick

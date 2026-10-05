@@ -260,7 +260,7 @@
     "preventDisplaySleep": "Chống sleep màn hình",
     "preventLidClosedSleep": "Giữ máy chạy khi gập nắp",
     "lidHint": "Trên macOS tùy chọn này giữ máy chạy khi gập nắp kể cả khi dùng pin; sẽ hỏi mật khẩu quản trị một lần.",
-    "clamshellActive": "Chế độ clamshell đang bật: sleep hệ thống bị tắt trên toàn máy cho tới khi bạn khôi phục.",
+    "clamshellActive": "Chế độ clamshell đang bật: sleep bị tắt trên toàn máy, kể cả lệnh Sleep từ menu Apple, cho tới khi bạn khôi phục.",
     "restoreClamshell": "Khôi phục sleep hệ thống",
     "sleepUnsupported": "Nền tảng này không hỗ trợ điều khiển sleep.",
     "sleepStatus": "Trạng thái",

@@ -195,9 +195,12 @@ reads, cache writes and output — not just input plus output.
 
 The lid-closed switch is the one with a side effect: on macOS, keeping a laptop running with
 the lid closed on battery needs the kernel `SleepDisabled` flag, which asks for an
-administrator password **once** and stays set system-wide until you press **Restore system
-sleep**. Declining the prompt falls back to `caffeinate -s`, which only works on AC power.
-The headless server build has no menu bar and never asserts sleep control.
+administrator password **once**. That flag blocks *every* sleep on the machine, including
+**Sleep** from the Apple menu, so the app clears it again as soon as the switch (or the sleep
+control itself) is turned off, and **Sleep now** clears it before suspending. Declining the
+prompt falls back to `caffeinate -s`, which only works on AC power. If a prompt was declined,
+press **Restore system sleep** in **Settings → Sleep control**. The headless server build has
+no menu bar and never asserts sleep control.
 
 On macOS the window's close button **hides the app into the menu bar**: the window is hidden
 rather than destroyed, the Dock tile and application menu disappear (the app switches to the

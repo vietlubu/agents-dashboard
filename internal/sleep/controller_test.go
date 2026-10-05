@@ -9,8 +9,10 @@ import (
 )
 
 type fakeInhibitor struct {
-	applied  []InhibitSpec
-	released int
+	applied   []InhibitSpec
+	released  int
+	clamshell bool
+	restores  int
 }
 
 func (f *fakeInhibitor) Apply(s InhibitSpec) error {
@@ -22,6 +24,12 @@ func (f *fakeInhibitor) Release() error {
 	f.released++
 	return nil
 }
+
+func (f *fakeInhibitor) RequestClamshell() error { f.clamshell = true; return nil }
+
+func (f *fakeInhibitor) RestoreClamshell() error { f.clamshell = false; f.restores++; return nil }
+
+func (f *fakeInhibitor) ClamshellActive() bool { return f.clamshell }
 
 type fakeSleeper struct{ sleeps int }
 
@@ -254,6 +262,59 @@ func TestOneShotActions(t *testing.T) {
 	}
 	if err := c.ScreensaverNow(); err != nil || scr.calls != 1 {
 		t.Errorf("ScreensaverNow err = %v, calls = %d", err, scr.calls)
+	}
+}
+
+func TestClearsClamshellWhenLidSettingOff(t *testing.T) {
+	cfg := newTestConfig(time.Hour, time.Minute)
+	cfg.Apply(config.Mutable{SleepEnabled: true, PreventLidClosedSleep: true})
+	inh := &fakeInhibitor{clamshell: true} // armed by an earlier session
+	c := newTestController(cfg, &fakeActivity{}, inh, &fakeSleeper{}, fakeIdler{})
+
+	c.tickOnce(context.Background())
+	if inh.restores != 0 || !c.Status().Clamshell {
+		t.Fatalf("restores = %d, clamshell = %v, want the flag left alone", inh.restores, c.Status().Clamshell)
+	}
+	// The user turns the lid setting off: the machine-wide flag must not outlive it.
+	cfg.Apply(config.Mutable{SleepEnabled: true, PreventLidClosedSleep: false})
+	c.tickOnce(context.Background())
+
+	if inh.restores != 1 || inh.clamshell || c.Status().Clamshell {
+		t.Fatalf("restores = %d, clamshell = %v, want the flag cleared", inh.restores, inh.clamshell)
+	}
+}
+
+func TestClearsClamshellWhenFeatureDisabled(t *testing.T) {
+	cfg := newTestConfig(time.Hour, time.Minute)
+	cfg.Apply(config.Mutable{SleepEnabled: false, PreventLidClosedSleep: true})
+	inh := &fakeInhibitor{clamshell: true}
+	c := newTestController(cfg, &fakeActivity{}, inh, &fakeSleeper{}, fakeIdler{})
+
+	c.tickOnce(context.Background())
+
+	if inh.restores != 1 || inh.clamshell {
+		t.Fatalf("restores = %d, clamshell = %v, want the flag cleared", inh.restores, inh.clamshell)
+	}
+}
+
+func TestSleepNowClearsClamshellFirst(t *testing.T) {
+	cfg := newTestConfig(time.Hour, time.Minute)
+	cfg.Apply(config.Mutable{SleepEnabled: true, PreventLidClosedSleep: true})
+	inh := &fakeInhibitor{clamshell: true}
+	slp := &fakeSleeper{}
+	c := New(Deps{
+		Cfg: cfg, Activity: &fakeActivity{}, Inhibitor: inh, Sleeper: slp,
+		Idler: fakeIdler{}, Supported: true, Tick: time.Hour,
+	})
+
+	if err := c.SleepNow(); err != nil {
+		t.Fatalf("SleepNow: %v", err)
+	}
+	if inh.restores != 1 || inh.clamshell {
+		t.Errorf("restores = %d, clamshell = %v, want the flag cleared before sleeping", inh.restores, inh.clamshell)
+	}
+	if slp.sleeps != 1 {
+		t.Errorf("sleeper calls = %d, want 1", slp.sleeps)
 	}
 }
 
