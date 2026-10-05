@@ -163,6 +163,63 @@ export interface ModelPrice {
 }
 
 /**
+ * ModelSeriesPoint is one (bucket, harness, provider, model) cell. It carries sums and
+ * counts, never a pre-divided average, so the frontend can fold buckets into a model row
+ * with correct weighting.
+ */
+export interface ModelSeriesPoint {
+    "harness": string;
+    "provider": string;
+    "model": string;
+    "bucket": string;
+    "requests": number;
+    "errors": number;
+    "input": number;
+    "output": number;
+    "cacheRead": number;
+    "cacheWrite": number;
+    "costUsd": number;
+    "latencySumMs": number;
+    "latencyCount": number;
+    "ttftSumMs": number;
+    "ttftCount": number;
+    "tpsSum": number;
+    "tpsCount": number;
+}
+
+/**
+ * ModelStats is one row of the Models screen aggregate.
+ */
+export interface ModelStats {
+    "harness": string;
+    "provider": string;
+    "model": string;
+    "requests": number;
+    "errors": number;
+    "input": number;
+    "output": number;
+    "cacheRead": number;
+    "cacheWrite": number;
+    "total": number;
+    "costUsd": number;
+    "unpriced": number;
+    "latencySumMs": number;
+    "latencyCount": number;
+    "ttftSumMs": number;
+    "ttftCount": number;
+
+    /**
+     * TpsSum and TpsCount carry the unweighted mean of per-request output*1000/latency,
+     * which is why they are a sum and a count rather than a ratio: dividing the two sums
+     * would give throughput weighted by latency instead.
+     */
+    "tpsSum": number;
+    "tpsCount": number;
+    "firstTs": number;
+    "lastTs": number;
+}
+
+/**
  * PriceRule is a per-model multiplier rule.
  */
 export interface PriceRule {

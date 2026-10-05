@@ -56,6 +56,22 @@ export function Latency(q: store$0.RangeQuery, limit: number): $CancellablePromi
 }
 
 /**
+ * ModelSeries returns per-bucket cells by harness+provider+model. Buckets with no usage
+ * are omitted; the frontend fills the axis from the range it asked for.
+ */
+export function ModelSeries(q: store$0.RangeQuery, granularity: string): $CancellablePromise<store$0.ModelSeriesPoint[] | null> {
+    return $Call.ByID(4052370437, q, granularity);
+}
+
+/**
+ * ModelStats aggregates the range by harness+provider+model for the Models screen. The
+ * rollups carry no provider, so this reads the event rows directly.
+ */
+export function ModelStats(q: store$0.RangeQuery): $CancellablePromise<store$0.ModelStats[] | null> {
+    return $Call.ByID(999608987, q);
+}
+
+/**
  * Realtime returns per-minute buckets and active sessions for the last `minutes`.
  */
 export function Realtime(minutes: number): $CancellablePromise<store$0.RealtimeSnapshot> {

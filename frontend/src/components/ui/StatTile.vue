@@ -43,5 +43,6 @@ const deltaClass = computed(() => {
       <span class="faint">vs previous</span>
     </div>
     <div v-else-if="props.hint" class="stat-delta faint">{{ props.hint }}</div>
+    <slot name="extra" />
   </div>
 </template>

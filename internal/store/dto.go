@@ -107,6 +107,61 @@ type BreakdownRow struct {
 	LatencyCnt int64   `json:"latencyCount"`
 }
 
+// ModelKey identifies one row of the Models screen: a model reached through one provider
+// on one harness. provider and harness are separate columns on usage_events and absent
+// from the rollups, so this grouping is only answerable from the event rows.
+type ModelKey struct {
+	Harness  string `json:"harness"`
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+}
+
+// ModelStats is one row of the Models screen aggregate.
+type ModelStats struct {
+	ModelKey
+	Requests     int64   `json:"requests"`
+	Errors       int64   `json:"errors"`
+	Input        int64   `json:"input"`
+	Output       int64   `json:"output"`
+	CacheRead    int64   `json:"cacheRead"`
+	CacheWrite   int64   `json:"cacheWrite"`
+	Total        int64   `json:"total"`
+	CostUSD      float64 `json:"costUsd"`
+	Unpriced     int64   `json:"unpriced"`
+	LatencySumMs int64   `json:"latencySumMs"`
+	LatencyCount int64   `json:"latencyCount"`
+	TTFTSumMs    int64   `json:"ttftSumMs"`
+	TTFTCount    int64   `json:"ttftCount"`
+	// TpsSum and TpsCount carry the unweighted mean of per-request output*1000/latency,
+	// which is why they are a sum and a count rather than a ratio: dividing the two sums
+	// would give throughput weighted by latency instead.
+	TpsSum   float64 `json:"tpsSum"`
+	TpsCount int64   `json:"tpsCount"`
+	FirstTS  int64   `json:"firstTs"`
+	LastTS   int64   `json:"lastTs"`
+}
+
+// ModelSeriesPoint is one (bucket, harness, provider, model) cell. It carries sums and
+// counts, never a pre-divided average, so the frontend can fold buckets into a model row
+// with correct weighting.
+type ModelSeriesPoint struct {
+	ModelKey
+	Bucket       string  `json:"bucket"`
+	Requests     int64   `json:"requests"`
+	Errors       int64   `json:"errors"`
+	Input        int64   `json:"input"`
+	Output       int64   `json:"output"`
+	CacheRead    int64   `json:"cacheRead"`
+	CacheWrite   int64   `json:"cacheWrite"`
+	CostUSD      float64 `json:"costUsd"`
+	LatencySumMs int64   `json:"latencySumMs"`
+	LatencyCount int64   `json:"latencyCount"`
+	TTFTSumMs    int64   `json:"ttftSumMs"`
+	TTFTCount    int64   `json:"ttftCount"`
+	TpsSum       float64 `json:"tpsSum"`
+	TpsCount     int64   `json:"tpsCount"`
+}
+
 // HeatCell is one day of the activity heatmap.
 type HeatCell struct {
 	Day     string  `json:"day"`

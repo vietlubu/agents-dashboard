@@ -18,6 +18,10 @@ export type BreakdownRow = StoreModels.BreakdownRow;
 export type HeatCell = StoreModels.HeatCell;
 export type LatencyPoint = StoreModels.LatencyPoint;
 export type RangeQuery = StoreModels.RangeQuery;
+// ModelKey is embedded in both Models shapes, so the generator flattens it: a row is
+// identified by its harness + provider + model fields directly.
+export type ModelStats = StoreModels.ModelStats;
+export type ModelSeriesPoint = StoreModels.ModelSeriesPoint;
 
 /** The realtime payload with its lists guaranteed present. */
 export interface RealtimeSnapshot {
@@ -86,6 +90,20 @@ export async function breakdown(q: RangeQuery, dim: string, limit = 50): Promise
 
 export async function latency(q: RangeQuery, limit = 2000): Promise<LatencyPoint[]> {
   return (await Dashboard.Latency(q, limit)) ?? [];
+}
+
+export async function modelStats(q: RangeQuery): Promise<ModelStats[]> {
+  return (await Dashboard.ModelStats(q)) ?? [];
+}
+
+// ModelSeries buckets at hour or day only; a week or month range is answered as days
+// rather than folded twice, since the screen's axis is built from these keys.
+export async function modelSeries(
+  q: RangeQuery,
+  granularity: GranularityChoice,
+): Promise<ModelSeriesPoint[]> {
+  const g = asGranularity(granularity);
+  return (await Dashboard.ModelSeries(q, g === "week" || g === "month" ? "day" : g)) ?? [];
 }
 
 /** A zeroed aggregate, used when a window has no data at all. */

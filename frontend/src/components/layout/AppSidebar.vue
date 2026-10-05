@@ -5,6 +5,7 @@ const items = [
   { to: "/", key: "nav.overview" },
   { to: "/realtime", key: "nav.realtime" },
   { to: "/analysis", key: "nav.analysis" },
+  { to: "/models", key: "nav.models" },
   { to: "/events", key: "nav.events" },
   { to: "/sessions", key: "nav.sessions" },
   { to: "/settings", key: "nav.settings" },

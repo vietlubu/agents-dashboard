@@ -33,6 +33,20 @@ const eventsAggCols = `COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens
   COALESCE(SUM(latency_ms),0), COALESCE(SUM(CASE WHEN latency_ms IS NOT NULL THEN 1 ELSE 0 END),0),
   COALESCE(SUM(ttft_ms),0), COALESCE(SUM(CASE WHEN ttft_ms IS NOT NULL THEN 1 ELSE 0 END),0)`
 
+// modelFacts are the additive per-row facts the Models screen folds. Everything is a SUM
+// or a COUNT so a bucket row and a whole-model row aggregate by the same addition.
+const modelFacts = `COUNT(*),
+  COALESCE(SUM(CASE WHEN outcome='error' THEN 1 ELSE 0 END),0),
+  COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
+  COALESCE(SUM(cache_read_tokens),0), COALESCE(SUM(cache_write_tokens),0),
+  COALESCE(SUM(cost_usd),0),
+  COALESCE(SUM(CASE WHEN cost_source='unavailable' THEN 1 ELSE 0 END),0),
+  COALESCE(SUM(latency_ms),0), COALESCE(SUM(CASE WHEN latency_ms IS NOT NULL THEN 1 ELSE 0 END),0),
+  COALESCE(SUM(ttft_ms),0), COALESCE(SUM(CASE WHEN ttft_ms IS NOT NULL THEN 1 ELSE 0 END),0),
+  COALESCE(TOTAL(CASE WHEN latency_ms > 0 THEN output_tokens * 1000.0 / latency_ms END),0),
+  COALESCE(SUM(CASE WHEN latency_ms > 0 THEN 1 ELSE 0 END),0),
+  MIN(ts), MAX(ts)`
+
 const rollupAggCols = `COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
   COALESCE(SUM(cache_read_tokens),0), COALESCE(SUM(cache_write_tokens),0),
   COALESCE(SUM(reasoning_tokens),0), COALESCE(SUM(total_tokens),0) AS agg_total,
@@ -585,6 +599,98 @@ func topKeys(counts map[string]int64, top int) map[string]struct{} {
 		out[list[i].key] = struct{}{}
 	}
 	return out
+}
+
+// modelFactsRow is one scanned row of modelFacts, in the column order the constant
+// declares. Leading keys are supplied by the caller through dests.
+type modelFactsRow struct {
+	requests, errors, input, output, cacheRead, cacheWrite int64
+	costUSD, tpsSum                                        float64
+	unpriced, latSum, latCnt, ttftSum, ttftCnt, tpsCnt     int64
+	first, last                                            int64
+}
+
+// scanModelFacts scans the modelFacts columns, after any leading key columns already
+// appended to dests by the caller.
+func scanModelFacts(dest []any, s interface{ Scan(...any) error }) (modelFactsRow, error) {
+	var f modelFactsRow
+	dest = append(dest, &f.requests, &f.errors, &f.input, &f.output, &f.cacheRead, &f.cacheWrite,
+		&f.costUSD, &f.unpriced, &f.latSum, &f.latCnt, &f.ttftSum, &f.ttftCnt,
+		&f.tpsSum, &f.tpsCnt, &f.first, &f.last)
+	return f, s.Scan(dest...)
+}
+
+// modelMaxRows bounds how many models one range can produce. It is not a tuning knob — it
+// is a backstop against a pathological grouping, since the screen renders every row.
+const modelMaxRows = 500
+
+// ModelStats groups the range by harness+provider+model, largest first.
+//
+// ponytail: reads usage_events directly instead of rollup_daily_hm, because the rollup has
+// no provider column. Acceptable while events stay in the tens of thousands (one
+// (model,ts) index scan per range); add a rollup_daily_hmp if a 90-day range ever scans
+// visibly.
+func (d *DB) ModelStats(ctx context.Context, q RangeQuery) ([]ModelStats, error) {
+	p := eventsWhere(q)
+	query := fmt.Sprintf(
+		"SELECT harness, provider, model, %s FROM usage_events%s GROUP BY 1,2,3 ORDER BY COUNT(*) DESC LIMIT %d",
+		modelFacts, p.where(), modelMaxRows)
+	rows, err := d.r.QueryContext(ctx, query, p.args...)
+	if err != nil {
+		return nil, fmt.Errorf("model stats: %w", err)
+	}
+	defer rows.Close()
+	out := []ModelStats{}
+	for rows.Next() {
+		var k ModelKey
+		f, err := scanModelFacts([]any{&k.Harness, &k.Provider, &k.Model}, rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan model stats: %w", err)
+		}
+		out = append(out, ModelStats{
+			ModelKey: k, Requests: f.requests, Errors: f.errors, Input: f.input,
+			Output: f.output, CacheRead: f.cacheRead, CacheWrite: f.cacheWrite,
+			Total: f.input + f.output + f.cacheRead + f.cacheWrite, CostUSD: f.costUSD,
+			Unpriced: f.unpriced, LatencySumMs: f.latSum, LatencyCount: f.latCnt,
+			TTFTSumMs: f.ttftSum, TTFTCount: f.ttftCnt, TpsSum: f.tpsSum, TpsCount: f.tpsCnt,
+			FirstTS: f.first, LastTS: f.last,
+		})
+	}
+	return out, rows.Err()
+}
+
+// ModelSeries returns (bucket, harness, provider, model) cells for the share chart, the
+// trend sparklines and the expanded row. Buckets with no usage are omitted; the caller
+// fills a dense axis from the range it asked for, the same convention Series uses.
+func (d *DB) ModelSeries(ctx context.Context, q RangeQuery, granularity string) ([]ModelSeriesPoint, error) {
+	p := eventsWhere(q)
+	bucket := "local_day"
+	if granularity == GranHour {
+		bucket = "CAST((ts / 3600000) * 3600000 AS TEXT)"
+	}
+	query := fmt.Sprintf("SELECT %s, harness, provider, model, %s FROM usage_events%s GROUP BY 1,2,3,4 ORDER BY 1",
+		bucket, modelFacts, p.where())
+	rows, err := d.r.QueryContext(ctx, query, p.args...)
+	if err != nil {
+		return nil, fmt.Errorf("model series: %w", err)
+	}
+	defer rows.Close()
+	out := []ModelSeriesPoint{}
+	for rows.Next() {
+		var bucketKey string
+		var k ModelKey
+		f, err := scanModelFacts([]any{&bucketKey, &k.Harness, &k.Provider, &k.Model}, rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan model series: %w", err)
+		}
+		out = append(out, ModelSeriesPoint{
+			ModelKey: k, Bucket: bucketKey, Requests: f.requests, Errors: f.errors,
+			Input: f.input, Output: f.output, CacheRead: f.cacheRead, CacheWrite: f.cacheWrite,
+			CostUSD: f.costUSD, LatencySumMs: f.latSum, LatencyCount: f.latCnt,
+			TTFTSumMs: f.ttftSum, TTFTCount: f.ttftCnt, TpsSum: f.tpsSum, TpsCount: f.tpsCnt,
+		})
+	}
+	return out, rows.Err()
 }
 
 // Heatmap returns per-day totals across a window, read from the daily rollup.

@@ -13,6 +13,8 @@ export type {
     HeatCell,
     LatencyPoint,
     ModelPrice,
+    ModelSeriesPoint,
+    ModelStats,
     PriceRule,
     RangeQuery,
     RealtimeSnapshot,

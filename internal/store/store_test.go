@@ -1046,3 +1046,150 @@ func TestSeriesGranularities(t *testing.T) {
 		t.Fatalf("hour over a long range = %+v (err %v), want the day fallback", picked, err)
 	}
 }
+
+// modelEvent builds one event for the Models screen tests, defaulting every field the
+// grouping does not depend on.
+func modelEvent(key, harness, provider, model string, ts int64) Event {
+	return Event{
+		EventKey: key, Harness: harness, SourceFile: "/tmp/a.jsonl", SessionID: "sess-1",
+		Project: "/proj", Model: model, Provider: provider, AgentType: "main",
+		Outcome: "ok", TS: ts, Input: 10, Output: 5, CacheRead: 0, CacheWrite: 0,
+		Reasoning: 0, Total: 15,
+	}
+}
+
+// A model reached through two providers, or on two harnesses, is two rows: the Models
+// screen exists to separate them, so collapsing on model alone would lose the answer.
+func TestModelStatsGroupsByHarnessProviderModel(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	at := func(h, m int) int64 {
+		return time.Date(2026, 3, 1, h, m, 0, 0, time.UTC).UnixMilli()
+	}
+
+	claudeViaAPI := modelEvent("e1", "claude", "anthropic", "opus", at(10, 0))
+	claudeViaBedrock := modelEvent("e2", "claude", "amazon-bedrock", "opus", at(10, 5))
+	// One failed request, and one timed request whose tokens/s is 100 * 1000 / 2000 = 50.
+	failed := modelEvent("e3", "codex", "openai", "gpt", at(10, 10))
+	failed.Outcome = "error"
+	timed := modelEvent("e4", "omp", "cpa", "sol", at(10, 15))
+	lat, ttft := int64(2000), int64(800)
+	timed.LatencyMs, timed.TTFTMs = &lat, &ttft
+	timed.Output, timed.Total = 100, 110
+
+	if _, _, err := db.InsertEvents(ctx, []Event{
+		claudeViaAPI, claudeViaBedrock, failed, timed,
+	}, time.UTC); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	rows, err := db.ModelStats(ctx, RangeQuery{FromMs: at(0, 0), ToMs: at(23, 0)})
+	if err != nil {
+		t.Fatalf("ModelStats: %v", err)
+	}
+	if len(rows) != 4 {
+		t.Fatalf("got %d rows, want 4 (provider/harness must split): %+v", len(rows), rows)
+	}
+	for _, row := range rows {
+		if row.Requests != 1 {
+			t.Errorf("%v requests = %d, want 1", row.ModelKey, row.Requests)
+		}
+		switch row.ModelKey {
+		case ModelKey{Harness: "codex", Provider: "openai", Model: "gpt"}:
+			if row.Errors != 1 {
+				t.Errorf("failed row errors = %d, want 1", row.Errors)
+			}
+			if row.TpsCount != 0 || row.TpsSum != 0 {
+				t.Errorf("untimed row tps = %v/%d, want 0/0", row.TpsSum, row.TpsCount)
+			}
+			if row.TTFTCount != 0 {
+				t.Errorf("untimed row ttftCount = %d, want 0", row.TTFTCount)
+			}
+		case ModelKey{Harness: "omp", Provider: "cpa", Model: "sol"}:
+			if row.TpsCount != 1 || row.TpsSum != 50 {
+				t.Errorf("timed row tps = %v/%d, want 50/1", row.TpsSum, row.TpsCount)
+			}
+			if row.LatencySumMs != 2000 || row.LatencyCount != 1 {
+				t.Errorf("timed row latency = %d/%d, want 2000/1", row.LatencySumMs, row.LatencyCount)
+			}
+			if row.TTFTSumMs != 800 || row.TTFTCount != 1 {
+				t.Errorf("timed row ttft = %d/%d, want 800/1", row.TTFTSumMs, row.TTFTCount)
+			}
+		}
+	}
+}
+
+// Requests fold into the model row; latency and TTFT fold as sum+count so the caller can
+// divide once, weighted by the number of rows that actually reported a value.
+func TestModelSeriesBucketsAndFoldsSums(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	at := func(h, m int) int64 {
+		return time.Date(2026, 3, 1, h, m, 0, 0, time.UTC).UnixMilli()
+	}
+	bucket := func(h int) string {
+		ts := at(h, 0)
+		return strconv.FormatInt(ts/3_600_000*3_600_000, 10)
+	}
+
+	ttft1, ttft2 := int64(400), int64(600)
+	a := modelEvent("s1", "omp", "cpa", "sol", at(10, 0))
+	a.TTFTMs = &ttft1
+	b := modelEvent("s2", "omp", "cpa", "sol", at(10, 30))
+	b.TTFTMs = &ttft2
+	c := modelEvent("s3", "omp", "cpa", "sol", at(11, 15))
+
+	if _, _, err := db.InsertEvents(ctx, []Event{a, b, c}, time.UTC); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	points, err := db.ModelSeries(ctx, RangeQuery{FromMs: at(0, 0), ToMs: at(23, 0)}, GranHour)
+	if err != nil {
+		t.Fatalf("ModelSeries: %v", err)
+	}
+	if len(points) != 2 {
+		t.Fatalf("got %d cells, want 2 hourly buckets: %+v", len(points), points)
+	}
+	if points[0].Bucket != bucket(10) || points[0].Requests != 2 {
+		t.Errorf("first cell = %+v, want bucket %s with 2 requests", points[0], bucket(10))
+	}
+	if points[1].Bucket != bucket(11) || points[1].Requests != 1 {
+		t.Errorf("second cell = %+v, want bucket %s with 1 request", points[1], bucket(11))
+	}
+	if points[0].TTFTSumMs != 1000 || points[0].TTFTCount != 2 {
+		t.Errorf("ttft fold = %d/%d, want 1000/2 (mean 500, not 400)", points[0].TTFTSumMs, points[0].TTFTCount)
+	}
+	if points[1].TTFTCount != 0 {
+		t.Errorf("cell without ttft should carry a zero count, got %d", points[1].TTFTCount)
+	}
+
+	// Day granularity keys on the stored local_day instead of the clock hour.
+	days, err := db.ModelSeries(ctx, RangeQuery{FromMs: at(0, 0), ToMs: at(23, 0)}, GranDay)
+	if err != nil {
+		t.Fatalf("ModelSeries day: %v", err)
+	}
+	if len(days) != 1 || days[0].Bucket != "2026-03-01" || days[0].Requests != 3 {
+		t.Errorf("day cells = %+v, want one 2026-03-01 cell with 3 requests", days)
+	}
+}
+
+// An empty range must yield an empty slice, never nil: it crosses to JS as null and every
+// caller loops over it.
+func TestModelStatsEmptyRangeReturnsEmptySlice(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	rows, err := db.ModelStats(ctx, RangeQuery{FromMs: 1, ToMs: 2})
+	if err != nil {
+		t.Fatalf("ModelStats: %v", err)
+	}
+	if rows == nil || len(rows) != 0 {
+		t.Fatalf("ModelStats on empty range = %+v, want empty non-nil slice", rows)
+	}
+	points, err := db.ModelSeries(ctx, RangeQuery{FromMs: 1, ToMs: 2}, GranHour)
+	if err != nil {
+		t.Fatalf("ModelSeries: %v", err)
+	}
+	if points == nil || len(points) != 0 {
+		t.Fatalf("ModelSeries on empty range = %+v, want empty non-nil slice", points)
+	}
+}

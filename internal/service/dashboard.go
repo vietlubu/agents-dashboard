@@ -77,3 +77,15 @@ func (s *DashboardService) Dims() ([]string, error) {
 		store.DimAgentType, store.DimOutcome, store.DimCostSource,
 	}, nil
 }
+
+// ModelStats aggregates the range by harness+provider+model for the Models screen. The
+// rollups carry no provider, so this reads the event rows directly.
+func (s *DashboardService) ModelStats(q store.RangeQuery) ([]store.ModelStats, error) {
+	return s.deps.DB.ModelStats(context.Background(), q)
+}
+
+// ModelSeries returns per-bucket cells by harness+provider+model. Buckets with no usage
+// are omitted; the frontend fills the axis from the range it asked for.
+func (s *DashboardService) ModelSeries(q store.RangeQuery, granularity string) ([]store.ModelSeriesPoint, error) {
+	return s.deps.DB.ModelSeries(context.Background(), q, granularity)
+}
