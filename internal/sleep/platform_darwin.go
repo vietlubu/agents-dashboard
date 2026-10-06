@@ -3,6 +3,7 @@
 package sleep
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,7 +17,7 @@ import (
 // PlatformSupported reports that macOS can control sleep.
 func PlatformSupported() bool { return true }
 
-func platformLidSupported() bool { return false }
+func platformLidSupported() bool { return nativeLidAvailable() }
 
 func defaultInhibitor() Inhibitor           { return newDarwinInhibitor() }
 func defaultSleeper() Sleeper               { return darwinSleeper{} }
@@ -28,59 +29,129 @@ func defaultIdler() Idler { return darwinIdler{} }
 
 // --- keep-awake ---------------------------------------------------------------
 
-// darwinInhibitor manages one long-lived caffeinate child. caffeinate holds power
-// assertions for as long as it runs, so a spec change is a kill-and-restart.
+// darwinInhibitor keeps idle assertions independent of private lid control.
+// Replacements start first; a failed change leaves the previous child intact.
 type darwinInhibitor struct {
+	opMu      sync.Mutex
 	mu        sync.Mutex
 	cmd       *exec.Cmd
 	flags     string
 	clamshell bool
+	lid       *darwinLidControl
 }
 
 func newDarwinInhibitor() *darwinInhibitor {
-	return &darwinInhibitor{clamshell: sleepDisabled()}
+	return &darwinInhibitor{
+		clamshell: sleepDisabled(),
+		lid: newDarwinLidControl(darwinLidHooks{
+			available: nativeLidAvailable(), set: nativeSetLid,
+			read: nativeReadLid, watch: nativeWatchLid, start: startLidGuardian,
+		}),
+	}
 }
 
 func (i *darwinInhibitor) Apply(spec InhibitSpec) error {
+	i.opMu.Lock()
+	defer i.opMu.Unlock()
+	flags := caffeinateFlags(spec)
+	// Even failed lid cleanup must not leave idle assertions after dashboard exit.
+	args := append(strings.Fields(flags), "-w", strconv.Itoa(os.Getpid()))
+	i.mu.Lock()
+	needsReplacement := flags != "" && (flags != i.flags || i.cmd == nil)
+	i.mu.Unlock()
+	var replacement *exec.Cmd
+	if needsReplacement {
+		replacement = exec.Command("caffeinate", args...)
+		if err := replacement.Start(); err != nil {
+			return fmt.Errorf("start caffeinate: %w", err)
+		}
+	}
+	if i.lid != nil {
+		if err := i.lid.reconcile(spec.Lid); err != nil {
+			if replacement != nil {
+				_ = replacement.Process.Kill()
+				_ = replacement.Wait()
+			}
+			return err
+		}
+	} else if spec.Lid {
+		if replacement != nil {
+			_ = replacement.Process.Kill()
+			_ = replacement.Wait()
+		}
+		return errUnsupported
+	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	flags := caffeinateFlags(spec)
+	if replacement == nil && flags != "" && i.cmd == nil {
+		replacement = exec.Command("caffeinate", args...)
+		if err := replacement.Start(); err != nil {
+			return fmt.Errorf("start caffeinate: %w", err)
+		}
+	}
 	if flags == i.flags && (i.cmd != nil || flags == "") {
 		return nil
 	}
-	i.stopLocked()
-	i.flags = flags
-	if flags == "" {
-		return nil
+	if err := i.stopLocked(); err != nil {
+		if replacement != nil {
+			_ = replacement.Process.Kill()
+			_ = replacement.Wait()
+		}
+		return err
 	}
-	cmd := exec.Command("caffeinate", strings.Fields(flags)...)
-	if err := cmd.Start(); err != nil {
-		i.flags = ""
-		return fmt.Errorf("start caffeinate: %w", err)
+	i.cmd, i.flags = replacement, flags
+	if replacement != nil {
+		go func() {
+			_ = replacement.Wait()
+			i.mu.Lock()
+			if i.cmd == replacement {
+				i.cmd = nil
+				i.flags = ""
+			}
+			i.mu.Unlock()
+		}()
 	}
-	i.cmd = cmd
-	// Reap the child whenever it exits so it never becomes a zombie.
-	go func() { _ = cmd.Wait() }()
 	return nil
 }
 
 func (i *darwinInhibitor) Release() error {
+	i.opMu.Lock()
+	defer i.opMu.Unlock()
+	if i.lid != nil {
+		if err := i.lid.release(); err != nil {
+			return err
+		}
+	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	i.stopLocked()
-	i.flags = ""
+	return i.stopLocked()
+}
+
+func (i *darwinInhibitor) stopLocked() error {
+	if i.cmd != nil && i.cmd.Process != nil {
+		if err := i.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			return fmt.Errorf("stop caffeinate: %w", err)
+		}
+	}
+	i.cmd, i.flags = nil, ""
 	return nil
 }
 
-func (i *darwinInhibitor) stopLocked() {
-	if i.cmd != nil && i.cmd.Process != nil {
-		_ = i.cmd.Process.Kill()
+func (i *darwinInhibitor) LidState() LidState {
+	if i.lid == nil {
+		return LidState{PrivateAPI: nativeLidAvailable()}
 	}
-	i.cmd = nil
+	return i.lid.status()
 }
 
-// caffeinateFlags holds only idle system/display assertions. Lid prevention is unsupported;
-// neither manual Sleep nor system-wide sleep policy is blocked by these assertions.
+func (i *darwinInhibitor) SetLidNotifier(notifier func()) {
+	if i.lid != nil {
+		i.lid.setNotifier(notifier)
+	}
+}
+
+// caffeinateFlags holds only idle system/display assertions. It must never add
+// a CPU/demand-sleep veto, including when private lid control is requested.
 func caffeinateFlags(spec InhibitSpec) string {
 	var parts []string
 	if spec.System {

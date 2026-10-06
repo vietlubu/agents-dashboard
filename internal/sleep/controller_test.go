@@ -41,11 +41,14 @@ func (f *fakeInhibitor) RestoreClamshell() error {
 
 func (f *fakeInhibitor) ClamshellActive() bool { return f.clamshell }
 
-type fakeSleeper struct{ sleeps int }
+type fakeSleeper struct {
+	sleeps int
+	err    error
+}
 
 func (f *fakeSleeper) Sleep() error {
 	f.sleeps++
-	return nil
+	return f.err
 }
 
 type fakeDisplaySleeper struct{ calls int }
@@ -664,5 +667,26 @@ func TestEmptyInternalSleepModeIsOff(t *testing.T) {
 	c.tickOnce(context.Background())
 	if st := c.Status(); st.Mode != config.SleepModeOff || st.Detail != "disabled" || st.SleepAtMs != 0 || c.seenActive || !c.idleSince.IsZero() {
 		t.Fatalf("empty mode not disabled: %+v", st)
+	}
+}
+
+func TestAutomaticSleepFailurePublishesWithoutScopes(t *testing.T) {
+	cfg := newTestConfig(time.Minute, time.Minute)
+	cfg.Apply(config.Mutable{PreventSystemSleep: false, PreventDisplaySleep: false})
+	act := &fakeActivity{act: Activity{Active: true}}
+	slp := &fakeSleeper{err: errors.New("sleep rejected")}
+	c := newTestController(cfg, act, &fakeInhibitor{}, slp, fakeIdler{idle: time.Hour, ok: true})
+	var statuses []Status
+	c.onStatus = func(st Status) { statuses = append(statuses, st) }
+	c.tickOnce(context.Background())
+	act.act.Active = false
+	c.idleSince = time.Now().Add(-time.Hour)
+	c.tickOnce(context.Background())
+	if got := statuses[len(statuses)-1]; got.Error != slp.err.Error() || got.Detail == "sleeping" || got.SleepAtMs <= time.Now().UnixMilli() {
+		t.Fatalf("failed sleep did not publish error and rearmed countdown: %+v", got)
+	}
+	c.tickOnce(context.Background())
+	if slp.sleeps != 1 {
+		t.Fatalf("failed sleep retried before delay: %d", slp.sleeps)
 	}
 }

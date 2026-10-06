@@ -38,6 +38,22 @@ type Inhibitor interface {
 	Release() error
 }
 
+// LidState separates a successful private lid request from the observed shared policy.
+// Known=false means the effective policy could not be read, not that sleep is blocked.
+type LidState struct {
+	PrivateAPI bool `json:"privateApi"`
+	Requested  bool `json:"requested"`
+	Known      bool `json:"known"`
+	Effective  bool `json:"effective"`
+}
+
+// LidObserver lets the controller reconcile native policy changes without polling the UI.
+// Implementations invoke the notifier outside their own locks and clear it on shutdown.
+type LidObserver interface {
+	LidState() LidState
+	SetLidNotifier(func())
+}
+
 // ClamshellController detects and explicitly restores a legacy machine-wide sleep flag.
 // It never enables lid prevention; normal assertions must not alter system policy.
 type ClamshellController interface {
@@ -96,6 +112,7 @@ type Status struct {
 	Supported      bool     `json:"supported"`
 	KeepingAwake   bool     `json:"keepingAwake"`
 	LidSupported   bool     `json:"lidSupported"`
+	LidControl     LidState `json:"lidControl"`
 	Active         bool     `json:"active"`
 	ActiveSessions int64    `json:"activeSessions"`
 	Agents         string   `json:"agents"`
@@ -105,7 +122,7 @@ type Status struct {
 	Held           HeldSpec `json:"held"`
 	Clamshell      bool     `json:"clamshell"`
 	// Detail names the current phase: disabled, unsupported, always, active, grace,
-	// waiting-user, sleeping or idle. It is meant for a status line, not for logic.
+	// waiting-user, sleeping, blocked or idle. It is meant for a status line, not for logic.
 	Detail string `json:"detail"`
 	Error  string `json:"error"`
 }

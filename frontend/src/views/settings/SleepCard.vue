@@ -50,9 +50,15 @@ watch(
   { immediate: true }
 );
 
+const privateLid = computed(() => sleep.status?.lidControl.privateApi && (lid.value || sleep.status.lidControl.requested));
+const lidUnconfirmed = computed(() => sleep.status?.lidControl.privateApi &&
+  (settings.settings?.preventLidClosedSleep || sleep.status.lidControl.requested) &&
+  (!sleep.status.lidControl.requested || !sleep.status.lidControl.known || !sleep.status.lidControl.effective));
+
 const statusKey = computed(() => {
   if (sleep.status?.error) return "settings.statusError";
   if (sleep.status?.clamshell) return "settings.statusLegacySleepDisabled";
+  if (lidUnconfirmed.value && ["always", "active", "grace"].includes(sleep.status?.detail ?? "")) return "settings.lidPending";
   const detail = sleep.status?.detail ?? "";
   switch (detail) {
     case "always":
@@ -158,6 +164,12 @@ async function restore() {
     <div v-if="sleep.status" class="faint" style="margin-top: 12px">
       {{ $t('settings.sleepStatus') }}: {{ $t(statusKey) }}
       <span v-if="sleep.status.error">: {{ sleep.status.error }}</span>
+    </div>
+
+    <div v-if="privateLid" class="note" style="margin-top: 12px">
+      <p style="margin-top: 0">{{ $t('settings.lidPrivateNotice') }}</p>
+      <div>{{ $t(sleep.status?.lidControl.requested ? 'settings.lidRequested' : 'settings.lidNotRequested') }}</div>
+      <div>{{ $t(!sleep.status?.lidControl.known ? 'settings.lidUnknown' : sleep.status.lidControl.effective ? 'settings.lidEffective' : 'settings.lidIneffective') }}</div>
     </div>
 
     <div class="row" style="margin-top: 14px">

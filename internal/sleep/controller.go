@@ -41,6 +41,7 @@ type Controller struct {
 	activity       ActivityProvider
 	inhibitor      Inhibitor
 	sleeper        Sleeper
+	lidObserver    LidObserver
 	displaySleeper DisplaySleeper
 	screensaver    ScreensaverStarter
 	idler          Idler
@@ -50,11 +51,13 @@ type Controller struct {
 	onStatus       func(Status)
 	tick           time.Duration
 
-	mu         sync.Mutex
-	status     Status
-	held       InhibitSpec
-	idleSince  time.Time
-	seenActive bool
+	// Reconcile and explicit Sleep must not race OS release/reapply operations.
+	operationMu sync.Mutex
+	mu          sync.Mutex
+	status      Status
+	held        InhibitSpec
+	idleSince   time.Time
+	seenActive  bool
 	// A committed non-agent mode must invalidate history even if kicks coalesce.
 	resetHistory bool
 	clamshell    bool
@@ -99,6 +102,11 @@ func New(d Deps) *Controller {
 		c.clamshell = cc.ClamshellActive()
 		c.status.Clamshell = c.clamshell
 	}
+	if observer, ok := d.Inhibitor.(LidObserver); ok {
+		c.lidObserver = observer
+		c.status.LidControl = observer.LidState()
+		observer.SetLidNotifier(c.Kick)
+	}
 	return c
 }
 
@@ -113,14 +121,17 @@ func (c *Controller) Start(ctx context.Context) {
 func (c *Controller) Stop() {
 	c.stopOnce.Do(func() { close(c.stop) })
 	<-c.done
+	c.operationMu.Lock()
+	defer c.operationMu.Unlock()
+	if c.lidObserver != nil {
+		c.lidObserver.SetLidNotifier(nil)
+	}
 	c.setHeld(InhibitSpec{})
 
-	// Reflect the release in the published status: nothing else will run afterwards.
+	// publish samples actual state, including a failed native lid release.
 	c.mu.Lock()
 	st := c.status
 	c.mu.Unlock()
-	st.Held = HeldSpec{}
-	st.KeepingAwake = false
 	st.SleepAtMs = 0
 	c.publish(st)
 }
@@ -166,6 +177,8 @@ func (c *Controller) RestoreClamshell() error {
 // keep-awake assertion is released first so a blocking inhibitor cannot veto the explicit
 // request; the next tick re-applies it according to the selected mode.
 func (c *Controller) SleepNow() error {
+	c.operationMu.Lock()
+	defer c.operationMu.Unlock()
 	if c.sleeper == nil {
 		return errUnsupported
 	}
@@ -176,7 +189,9 @@ func (c *Controller) SleepNow() error {
 			return err
 		}
 	}
-	c.setHeld(InhibitSpec{})
+	if err := c.setHeld(InhibitSpec{}); err != nil {
+		return err
+	}
 	return c.sleeper.Sleep()
 }
 
@@ -212,17 +227,13 @@ func (c *Controller) ActiveNow(ctx context.Context) bool {
 
 // Status returns a copy of the current state.
 func (c *Controller) Status() Status {
+	lid := LidState{}
+	if c.lidObserver != nil {
+		lid = c.lidObserver.LidState()
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	st := c.status
-	// Recovery is immediately visible to RPC reads; only the reconcile loop emits
-	// live status events, so an older tick cannot arrive after its recovery event.
-	st.Clamshell = c.clamshell
-	st.Error = c.lastErr
-	if c.clamshellErr != "" {
-		st.Error = c.clamshellErr
-	}
-	return st
+	return c.statusLocked(c.status, lid)
 }
 
 func (c *Controller) loop(ctx context.Context) {
@@ -245,6 +256,8 @@ func (c *Controller) loop(ctx context.Context) {
 }
 
 func (c *Controller) tickOnce(ctx context.Context) {
+	c.operationMu.Lock()
+	defer c.operationMu.Unlock()
 	snap := c.cfg.Snapshot()
 	mode := snap.SleepMode
 	if !config.ValidSleepMode(mode) {
@@ -360,7 +373,11 @@ func (c *Controller) tickOnce(ctx context.Context) {
 		return
 	}
 
-	c.setHeld(InhibitSpec{})
+	if err := c.setHeld(InhibitSpec{}); err != nil {
+		st.Detail = "blocked"
+		c.publish(st)
+		return
+	}
 	st.Detail = "sleeping"
 	c.publish(st)
 	if err := c.sleeper.Sleep(); err != nil {
@@ -370,7 +387,10 @@ func (c *Controller) tickOnce(ctx context.Context) {
 		// Re-arm the countdown so a failed sleep is retried after another full delay
 		// rather than every tick.
 		c.idleSince = time.Now()
+		st.SleepAtMs = c.idleSince.Add(snap.SleepAfter).UnixMilli()
 		c.mu.Unlock()
+		st.Detail = "grace"
+		c.publish(st)
 	}
 }
 
@@ -380,18 +400,24 @@ func (c *Controller) clamshellActive() bool {
 	return c.clamshell
 }
 
-// setHeld reconciles the OS with spec, remembering what was asked for so a repeated tick
-// is a no-op.
-func (c *Controller) setHeld(spec InhibitSpec) {
+// setHeld remembers successful requests; native lid policy is observed again even when
+// the requested spec is unchanged, because powerd can overwrite the shared mask.
+func (c *Controller) setHeld(spec InhibitSpec) error {
 	c.mu.Lock()
-	if c.held == spec {
-		c.mu.Unlock()
-		return
-	}
+	unchanged := c.held == spec
 	c.mu.Unlock()
+	// Native policy may drift, and Release must also clean a partially applied request.
+	if unchanged && !spec.Empty() && c.lidObserver == nil {
+		return nil
+	}
 
 	var err error
-	if spec.Empty() {
+	if c.inhibitor == nil {
+		if spec.Empty() {
+			return nil
+		}
+		err = errUnsupported
+	} else if spec.Empty() {
 		err = c.inhibitor.Release()
 	} else {
 		err = c.inhibitor.Apply(spec)
@@ -410,17 +436,16 @@ func (c *Controller) setHeld(spec InhibitSpec) {
 	if err != nil {
 		c.log.Warn("sleep inhibitor", "error", err)
 	}
+	return err
 }
 
 func (c *Controller) publish(st Status) {
-	c.mu.Lock()
-	st.Held = HeldSpec{System: c.held.System, Display: c.held.Display, Lid: c.held.Lid}
-	st.KeepingAwake = !c.held.Empty()
-	st.Clamshell = c.clamshell
-	st.Error = c.lastErr
-	if c.clamshellErr != "" {
-		st.Error = c.clamshellErr
+	lid := LidState{}
+	if c.lidObserver != nil {
+		lid = c.lidObserver.LidState()
 	}
+	c.mu.Lock()
+	st = c.statusLocked(st, lid)
 	changed := c.status != st
 	c.status = st
 	onStatus := c.onStatus
@@ -428,4 +453,20 @@ func (c *Controller) publish(st Status) {
 	if changed && onStatus != nil {
 		onStatus(st)
 	}
+}
+
+// statusLocked gives event payloads and RPC reads the same actual-state semantics.
+func (c *Controller) statusLocked(st Status, lid LidState) Status {
+	st.Held = HeldSpec{System: c.held.System, Display: c.held.Display, Lid: c.held.Lid}
+	st.LidControl = lid
+	if lid.PrivateAPI {
+		st.Held.Lid = lid.Requested && lid.Known && lid.Effective
+	}
+	st.KeepingAwake = st.Held.System || st.Held.Display || st.Held.Lid
+	st.Clamshell = c.clamshell
+	st.Error = c.lastErr
+	if c.clamshellErr != "" {
+		st.Error = c.clamshellErr
+	}
+	return st
 }

@@ -194,7 +194,7 @@ variable is no longer read.
 
 | | Keep-awake | Display | Lid closed | Sleep now | Display now | Screensaver |
 |---|---|---|---|---|---|---|
-| macOS | `caffeinate -i` (idle sleep only) | `caffeinate -d` | not supported; normal macOS lid behavior applies | `pmset sleepnow` | `pmset displaysleepnow` | `ScreenSaverEngine` |
+| macOS | `caffeinate -i` (idle sleep only) | `caffeinate -d` | best-effort private selector 12 (CGO builds) | `pmset sleepnow` | `pmset displaysleepnow` | `ScreenSaverEngine` |
 | Windows | `SetThreadExecutionState` | `+ ES_DISPLAY_REQUIRED` | no supported API | `SetSuspendState` | `SC_MONITORPOWER` broadcast | `SC_SCREENSAVE` broadcast |
 | Linux | `systemd-inhibit --what=idle:sleep` | best-effort (may be unavailable on Wayland) | `handle-lid-switch` | `systemctl suspend` | `xset dpms force off` | `xdg-screensaver activate` |
 
@@ -205,10 +205,27 @@ suspending, and **Start screensaver** switches the session to the screensaver. I
 **Session usage (today)** section and the menu-bar count report every token — input, cache
 reads, cache writes and output — not just input plus output.
 
-On macOS the app only holds `caffeinate -i`/`-d` assertions. Changing modes or scopes needs no
-administrator password and does not disable **Apple → Sleep**. Lid-closed prevention is
-unsupported on macOS and Windows, so those controls are hidden; a previously saved lid choice
-is retained but ignored there. Linux keeps its existing lid-switch inhibitor.
+On macOS ordinary prevention uses only `caffeinate -i`/`-d`, bound to the dashboard PID with
+`-w` so an idle child cannot retain assertions after dashboard exit. The separate **Keep running with
+the lid closed** scope uses the private RootDomain selector 12 without administrator
+authorization; it does not enable `pmset disablesleep` or a demand-sleep assertion. Manual
+**Apple → Sleep** remains available by design, and lid prevention does not require keeping
+the display awake. Windows has no supported lid API; macOS builds without CGO hide the lid
+control and retain its saved choice. Linux keeps its existing lid-switch inhibitor.
+
+The lid status separates the saved choice, an acknowledged request, and observed shared
+policy. An acknowledgement alone is not proof that lid sleep remains blocked. This private
+policy is shared with `powerd`, not owned by a process: another writer may overwrite it,
+and changing AC power with the lid closed may sleep the Mac before reconciliation. Avoid
+running another lid manager. Turning the scope off or quitting with the lid closed may
+immediately allow sleep. A same-executable, unprivileged guardian resets applied requests
+when its parent pipe closes, reducing but not guaranteeing crash cleanup. Startup does not
+reset another writer's policy. See [the macOS lid research](docs/macos-lid-sleep-research.md)
+for the source evidence and limitations.
+
+Verification for this implementation uses injected transports, fake child processes,
+controller runtime smoke, and compile/build checks. Actual lid/power transitions and
+Apple-menu Sleep have not been exercised; no hardware guarantee is claimed.
 
 **Upgrading from a version that used `pmset disablesleep`:** the machine-wide `SleepDisabled`
 flag can remain enabled after that version exits. The app detects it and shows a warning:
@@ -218,8 +235,9 @@ authorization. The app never enables this flag again and does not silently chang
 power policy on startup, mode changes, or Quit. The app's explicit **Sleep now** action also
 restores a detected legacy flag before sleeping and reports failure if recovery is refused.
 
-Ordinary assertions are released on Quit. The headless server has no native menu bar; sleep
-control still follows the host platform's capabilities and the saved policy.
+Ordinary assertions and acknowledged lid requests are released on Quit. If lid release fails,
+the error remains visible and **Sleep now** does not proceed. The headless server has no native
+menu bar; sleep control still follows the host platform's capabilities and the saved policy.
 
 On macOS the window's close button **hides the app into the menu bar**: the window is hidden
 rather than destroyed, the Dock tile and application menu disappear (the app switches to the

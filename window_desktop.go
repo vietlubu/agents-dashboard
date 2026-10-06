@@ -63,10 +63,13 @@ type trayLabels struct {
 	confirmTitle, confirmMsg                    string
 	confirmSleep, confirmCancel                 string
 
-	stUnsupported, stDisabled, stActive  string
-	stGrace, stWaitingUser, stSleeping   string
-	stIdle, stAlways, stError, noTargets string
-	lidUnsupported, legacySleepDisabled  string
+	stUnsupported, stDisabled, stActive                     string
+	stGrace, stWaitingUser, stSleeping                      string
+	stIdle, stAlways, stError, noTargets                    string
+	lidUnsupported, legacySleepDisabled                     string
+	lidPrivate, lidRequested, lidNotRequested               string
+	lidEffective, lidIneffective, lidUnknown, lidPending    string
+	lidManualWarning, lidReleaseWarning, lidGuardianWarning string
 }
 
 func trayLabelsFor(locale string) trayLabels {
@@ -109,6 +112,16 @@ func trayLabelsFor(locale string) trayLabels {
 			noTargets:           "Chưa chọn mục nào cần chặn sleep.",
 			lidUnsupported:      "Không hỗ trợ chặn sleep khi gập nắp",
 			legacySleepDisabled: "Sleep toàn hệ thống đang bị tắt; cần khôi phục",
+			lidPrivate:          "Điều khiển nắp riêng, dùng chung · không bảo đảm",
+			lidRequested:        "Đã yêu cầu chặn sleep khi gập nắp",
+			lidNotRequested:     "Chưa yêu cầu chặn sleep khi gập nắp",
+			lidEffective:        "Chính sách nắp dùng chung: đang chặn sleep",
+			lidIneffective:      "Chính sách nắp dùng chung: cho phép sleep",
+			lidUnknown:          "Chính sách nắp dùng chung: chưa xác nhận",
+			lidPending:          "Chặn sleep khi gập nắp đang chờ hoặc chưa xác nhận",
+			lidManualWarning:    "Vẫn dùng được Sleep thủ công; đổi nguồn AC có thể khiến máy ngủ",
+			lidReleaseWarning:   "Tắt hoặc thoát khi nắp đóng có thể cho phép máy ngủ ngay",
+			lidGuardianWarning:  "Dùng chung với powerd; tránh trình quản lý nắp khác. Guardian không bảo đảm khôi phục sau sự cố",
 		}
 	}
 	return trayLabels{
@@ -149,6 +162,16 @@ func trayLabelsFor(locale string) trayLabels {
 		noTargets:           "No sleep prevention targets are selected.",
 		lidUnsupported:      "Lid-closed sleep prevention unavailable",
 		legacySleepDisabled: "System sleep is disabled; restore it",
+		lidPrivate:          "Private shared lid control · best effort",
+		lidRequested:        "Lid prevention requested",
+		lidNotRequested:     "Lid prevention not requested",
+		lidEffective:        "Shared lid policy: sleep prevented",
+		lidIneffective:      "Shared lid policy: sleep allowed",
+		lidUnknown:          "Shared lid policy: unconfirmed",
+		lidPending:          "Lid prevention pending or unconfirmed",
+		lidManualWarning:    "Manual Sleep remains available; switching AC power may sleep the Mac",
+		lidReleaseWarning:   "Turning off or quitting with the lid closed may immediately allow sleep",
+		lidGuardianWarning:  "Shared with powerd; avoid another lid manager. Guardian cannot guarantee crash cleanup",
 	}
 }
 
@@ -166,23 +189,26 @@ type tray struct {
 	show  *application.MenuItem
 	quit  *application.MenuItem
 
-	modeHeading    *application.MenuItem
-	modeOff        *application.MenuItem
-	modeAgent      *application.MenuItem
-	modeAlways     *application.MenuItem
-	sysSleep       *application.MenuItem
-	dispSleep      *application.MenuItem
-	lidSleep       *application.MenuItem
-	lidUnsupported *application.MenuItem
-	restore        *application.MenuItem
-	sleepNow       *application.MenuItem
-	dispNow        *application.MenuItem
-	screensaver    *application.MenuItem
-	status         *application.MenuItem
-	total          *application.MenuItem
-	input          *application.MenuItem
-	cache          *application.MenuItem
-	output         *application.MenuItem
+	modeHeading                                             *application.MenuItem
+	modeOff                                                 *application.MenuItem
+	modeAgent                                               *application.MenuItem
+	modeAlways                                              *application.MenuItem
+	sysSleep                                                *application.MenuItem
+	dispSleep                                               *application.MenuItem
+	lidSleep                                                *application.MenuItem
+	lidUnsupported                                          *application.MenuItem
+	lidNotice                                               *application.MenuItem
+	lidRequestStatus, lidPolicyStatus                       *application.MenuItem
+	lidManualWarning, lidReleaseWarning, lidGuardianWarning *application.MenuItem
+	restore                                                 *application.MenuItem
+	sleepNow                                                *application.MenuItem
+	dispNow                                                 *application.MenuItem
+	screensaver                                             *application.MenuItem
+	status                                                  *application.MenuItem
+	total                                                   *application.MenuItem
+	input                                                   *application.MenuItem
+	cache                                                   *application.MenuItem
+	output                                                  *application.MenuItem
 
 	locale      string
 	labels      trayLabels
@@ -223,6 +249,17 @@ func setupTray(app *application.App, setSvc *service.SettingsService, sleepSvc *
 	t.lidUnsupported = menu.Add(l.lidUnsupported)
 	t.lidUnsupported.SetEnabled(false)
 	t.lidUnsupported.SetHidden(sleepSvc.Status().LidSupported)
+	lidMenu := menu.AddSubmenu(l.lidPrivate)
+	t.lidNotice = menu.FindByLabel(l.lidPrivate)
+	t.lidRequestStatus = lidMenu.Add(l.lidNotRequested)
+	t.lidPolicyStatus = lidMenu.Add(l.lidUnknown)
+	t.lidManualWarning = lidMenu.Add(l.lidManualWarning)
+	t.lidReleaseWarning = lidMenu.Add(l.lidReleaseWarning)
+	t.lidGuardianWarning = lidMenu.Add(l.lidGuardianWarning)
+	for _, item := range []*application.MenuItem{t.lidRequestStatus, t.lidPolicyStatus, t.lidManualWarning, t.lidReleaseWarning, t.lidGuardianWarning} {
+		item.SetEnabled(false)
+	}
+	t.lidNotice.SetHidden(true)
 	t.restore = menu.Add(l.restore)
 	t.restore.OnClick(func(*application.Context) { t.restoreClamshell() })
 
@@ -357,7 +394,7 @@ func (t *tray) requestSleepNow() {
 			t.confirmSleepNow()
 			return
 		}
-		_ = t.sleepSvc.SleepNow()
+		t.sleepNowWithError()
 	}()
 }
 
@@ -368,9 +405,16 @@ func (t *tray) confirmSleepNow() {
 	dlg := t.app.Dialog.Question()
 	dlg.SetTitle(l.confirmTitle)
 	dlg.SetMessage(l.confirmMsg)
-	dlg.AddButton(l.confirmSleep).OnClick(func() { _ = t.sleepSvc.SleepNow() })
+	dlg.AddButton(l.confirmSleep).OnClick(t.sleepNowWithError)
 	dlg.AddButton(l.confirmCancel).SetAsCancel()
 	dlg.Show()
+}
+
+func (t *tray) sleepNowWithError() {
+	if err := t.sleepSvc.SleepNow(); err != nil {
+		t.showSleepError(err)
+	}
+	t.requestRefresh()
 }
 
 // displaySleepNow turns the display off without suspending the machine.
@@ -428,8 +472,26 @@ func (t *tray) refresh() {
 	t.lidSleep.SetEnabled(scopesEnabled)
 	t.lidSleep.SetHidden(!st.LidSupported)
 	t.lidUnsupported.SetHidden(st.LidSupported)
+	t.lidNotice.SetHidden(!st.LidControl.PrivateAPI || !(st.LidControl.Requested || s != nil && s.PreventLidClosedSleep))
+	t.lidNotice.SetLabel(l.lidPrivate)
+	requestLabel := l.lidNotRequested
+	if st.LidControl.Requested {
+		requestLabel = l.lidRequested
+	}
+	t.lidRequestStatus.SetLabel(requestLabel)
+	policyLabel := l.lidUnknown
+	if st.LidControl.Known {
+		policyLabel = l.lidIneffective
+		if st.LidControl.Effective {
+			policyLabel = l.lidEffective
+		}
+	}
+	t.lidPolicyStatus.SetLabel(policyLabel)
+	t.lidManualWarning.SetLabel(l.lidManualWarning)
+	t.lidReleaseWarning.SetLabel(l.lidReleaseWarning)
+	t.lidGuardianWarning.SetLabel(l.lidGuardianWarning)
 	t.restore.SetEnabled(st.Clamshell)
-	t.status.SetLabel(l.status + t.statusText(st))
+	t.status.SetLabel(l.status + t.statusText(st, s != nil && s.PreventLidClosedSleep))
 
 	tot, err := t.sleepSvc.Today()
 	if err != nil {
@@ -477,7 +539,7 @@ func (t *tray) applyLabels(locale string) {
 	t.quit.SetLabel(l.quit)
 }
 
-func (t *tray) statusText(st sleep.Status) string {
+func (t *tray) statusText(st sleep.Status, lidSelected bool) string {
 	l := t.labels
 	if st.Error != "" {
 		return l.stError + ": " + st.Error
@@ -490,6 +552,11 @@ func (t *tray) statusText(st sleep.Status) string {
 	}
 	if st.Mode == config.SleepModeOff {
 		return l.stDisabled
+	}
+	if st.LidControl.PrivateAPI && (st.Detail == "always" || st.Detail == "active" || st.Detail == "grace") {
+		if (st.LidControl.Requested || lidSelected) && (!st.LidControl.Requested || !st.LidControl.Known || !st.LidControl.Effective) {
+			return l.lidPending
+		}
 	}
 	switch st.Detail {
 	case "always":

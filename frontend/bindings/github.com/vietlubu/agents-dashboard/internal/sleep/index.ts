@@ -3,5 +3,6 @@
 
 export type {
     HeldSpec,
+    LidState,
     Status
 } from "./models.js";

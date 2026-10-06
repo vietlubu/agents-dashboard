@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"embed"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -47,6 +48,13 @@ func init() {
 }
 
 func main() {
+	if handled, err := sleep.RunLidGuardian(os.Args[1:]); handled {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		panic(err)

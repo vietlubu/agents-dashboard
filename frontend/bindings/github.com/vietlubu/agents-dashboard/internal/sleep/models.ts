@@ -11,6 +11,17 @@ export interface HeldSpec {
 }
 
 /**
+ * LidState separates a successful private lid request from the observed shared policy.
+ * Known=false means the effective policy could not be read, not that sleep is blocked.
+ */
+export interface LidState {
+    "privateApi": boolean;
+    "requested": boolean;
+    "known": boolean;
+    "effective": boolean;
+}
+
+/**
  * Status is the controller's externally visible state. Every field is JSON-safe and
  * comparable, so the service can hand it straight to the frontend and the controller can
  * cheaply detect a change before emitting an event.
@@ -20,6 +31,7 @@ export interface Status {
     "supported": boolean;
     "keepingAwake": boolean;
     "lidSupported": boolean;
+    "lidControl": LidState;
     "active": boolean;
     "activeSessions": number;
     "agents": string;
@@ -31,7 +43,7 @@ export interface Status {
 
     /**
      * Detail names the current phase: disabled, unsupported, always, active, grace,
-     * waiting-user, sleeping or idle. It is meant for a status line, not for logic.
+     * waiting-user, sleeping, blocked or idle. It is meant for a status line, not for logic.
      */
     "detail": string;
     "error": string;
