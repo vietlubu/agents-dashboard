@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// schemaVersion is bumped whenever schemaV1 (or a later step) changes shape.
-const schemaVersion = 1
+// schemaVersion is bumped whenever the schema or persisted settings are migrated.
+const schemaVersion = 2
 
 // schemaV1 is applied statement by statement so a failure names the offending table.
 //
@@ -171,17 +171,44 @@ func migrate(ctx context.Context, w *sql.DB) error {
 	if version >= schemaVersion {
 		return nil
 	}
-	for _, stmt := range strings.Split(schemaV1, ";") {
-		stmt = strings.TrimSpace(stmt)
-		if stmt == "" {
-			continue
-		}
-		if _, err := w.ExecContext(ctx, stmt); err != nil {
-			return fmt.Errorf("apply schema (%s): %w", firstLine(stmt), err)
+	if version < 1 {
+		for _, stmt := range strings.Split(schemaV1, ";") {
+			stmt = strings.TrimSpace(stmt)
+			if stmt == "" {
+				continue
+			}
+			if _, err := w.ExecContext(ctx, stmt); err != nil {
+				return fmt.Errorf("apply schema (%s): %w", firstLine(stmt), err)
+			}
 		}
 	}
-	if _, err := w.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", schemaVersion)); err != nil {
-		return fmt.Errorf("set schema version: %w", err)
+	if version < 2 {
+		tx, err := w.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("begin sleep mode migration: %w", err)
+		}
+		defer tx.Rollback()
+		// Accept exactly the legacy spellings supported by strconv.ParseBool.
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO settings (key, value)
+			SELECT 'sleep_mode', CASE
+				WHEN value IN ('1', 't', 'T', 'TRUE', 'true', 'True') THEN 'agent'
+				ELSE 'off' END
+			FROM settings
+			WHERE key = 'sleep_enabled'
+				AND value IN ('1', 't', 'T', 'TRUE', 'true', 'True', '0', 'f', 'F', 'FALSE', 'false', 'False')
+			ON CONFLICT(key) DO NOTHING`); err != nil {
+			return fmt.Errorf("migrate sleep mode: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM settings WHERE key = 'sleep_enabled'`); err != nil {
+			return fmt.Errorf("remove legacy sleep setting: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "PRAGMA user_version = 2"); err != nil {
+			return fmt.Errorf("set schema version: %w", err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit sleep mode migration: %w", err)
+		}
 	}
 	return nil
 }

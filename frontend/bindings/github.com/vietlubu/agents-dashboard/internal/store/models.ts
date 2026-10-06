@@ -378,7 +378,7 @@ export interface Settings {
     /**
      * Sleep control.
      */
-    "sleepEnabled": boolean;
+    "sleepMode": string;
     "sleepAfterSeconds": number;
     "sleepActiveWindowSeconds": number;
     "preventSystemSleep": boolean;
@@ -401,9 +401,9 @@ export interface SettingsPatch {
     "locale": string;
 
     /**
-     * Sleep control. The booleans are pointers so "off" is distinguishable from "unchanged".
+     * Sleep control. Empty mode is unchanged; bool pointers distinguish false from unchanged.
      */
-    "sleepEnabled": boolean | null;
+    "sleepMode": string;
     "preventSystemSleep": boolean | null;
     "preventDisplaySleep": boolean | null;
     "preventLidClosedSleep": boolean | null;

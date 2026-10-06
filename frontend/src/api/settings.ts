@@ -19,7 +19,7 @@ const UNCHANGED: SettingsPatch = {
   serverPort: 0,
   theme: "",
   locale: "",
-  sleepEnabled: null,
+  sleepMode: "",
   preventSystemSleep: null,
   preventDisplaySleep: null,
   preventLidClosedSleep: null,

@@ -155,3 +155,60 @@ func TestCommaPaths(t *testing.T) {
 		t.Error("empty input must yield no paths")
 	}
 }
+
+func TestSleepModeConfig(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		mode    string
+		want    string
+		warning string
+	}{
+		{name: "default", want: SleepModeOff},
+		{name: "off", mode: SleepModeOff, want: SleepModeOff},
+		{name: "agent", mode: SleepModeAgent, want: SleepModeAgent},
+		{name: "always", mode: SleepModeAlways, want: SleepModeAlways},
+		{name: "invalid", mode: "sometimes", want: SleepModeOff, warning: `sleep mode "sometimes" is invalid; using off`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AGENTS_DASHBOARD_HOME", t.TempDir())
+			t.Setenv("AGENTS_DASHBOARD_TZ", "UTC")
+			t.Setenv("AGENTS_DASHBOARD_SERVER_PORT", "8080")
+			t.Setenv("AGENTS_DASHBOARD_SLEEP_MODE", tc.mode)
+			// The retired boolean environment setting must not enable sleep prevention.
+			t.Setenv("AGENTS_DASHBOARD_SLEEP_ENABLED", "true")
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if got := cfg.Snapshot().SleepMode; got != tc.want {
+				t.Errorf("SleepMode = %q, want %q", got, tc.want)
+			}
+			if tc.warning == "" {
+				if len(cfg.Warnings) != 0 {
+					t.Errorf("unexpected warnings: %v", cfg.Warnings)
+				}
+			} else if len(cfg.Warnings) != 1 || cfg.Warnings[0] != tc.warning {
+				t.Errorf("warnings = %v, want %q", cfg.Warnings, tc.warning)
+			}
+			if tc.mode == SleepModeAlways {
+				cfg.Apply(Mutable{})
+				if got := cfg.Snapshot().SleepMode; got != SleepModeAlways {
+					t.Errorf("empty Apply changed mode to %q", got)
+				}
+				cfg.Apply(Mutable{SleepMode: "invalid"})
+				if got := cfg.Snapshot().SleepMode; got != SleepModeAlways {
+					t.Errorf("invalid Apply changed mode to %q", got)
+				}
+				cfg.Apply(Mutable{SleepMode: SleepModeOff})
+				if got := cfg.Snapshot().SleepMode; got != SleepModeOff {
+					t.Errorf("Apply off left mode %q", got)
+				}
+			}
+		})
+	}
+	for _, mode := range []string{"", "invalid", "AGENT", " always "} {
+		if ValidSleepMode(mode) {
+			t.Errorf("ValidSleepMode(%q) = true", mode)
+		}
+	}
+}

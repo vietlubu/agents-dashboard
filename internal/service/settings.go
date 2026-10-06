@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/vietlubu/agents-dashboard/internal/config"
@@ -15,6 +16,8 @@ import (
 // prices and price rules, and the destructive reset.
 type SettingsService struct {
 	deps *Deps
+	// Keep persistence, runtime application and authoritative notifications in order.
+	updateMu sync.Mutex
 }
 
 // NewSettingsService builds the settings service.
@@ -39,12 +42,15 @@ func (s *SettingsService) Get() (store.Settings, error) {
 		Theme:          "system",
 		Locale:         "en",
 
-		SleepEnabled:          cfg.SleepEnabled,
+		SleepMode:             cfg.SleepMode,
 		SleepAfterS:           int64(cfg.SleepAfter / time.Second),
 		SleepActiveWindowS:    int64(cfg.SleepActiveWindow / time.Second),
 		PreventSystemSleep:    cfg.PreventSystemSleep,
 		PreventDisplaySleep:   cfg.PreventDisplaySleep,
 		PreventLidClosedSleep: cfg.PreventLidClosedSleep,
+	}
+	if !config.ValidSleepMode(out.SleepMode) {
+		out.SleepMode = config.SleepModeOff
 	}
 
 	if v, ok, err := db.GetSetting(ctx, store.SettingTZ); err != nil {
@@ -102,10 +108,10 @@ func (s *SettingsService) Get() (store.Settings, error) {
 	} else if ok {
 		out.Locale = v
 	}
-	if v, err := db.SettingBool(ctx, store.SettingSleepEnabled, out.SleepEnabled); err != nil {
+	if v, ok, err := db.GetSetting(ctx, store.SettingSleepMode); err != nil {
 		return out, err
-	} else {
-		out.SleepEnabled = v
+	} else if ok && config.ValidSleepMode(v) {
+		out.SleepMode = v
 	}
 	if v, err := db.SettingInt(ctx, store.SettingSleepAfterS, out.SleepAfterS); err != nil {
 		return out, err
@@ -141,6 +147,11 @@ func (s *SettingsService) Get() (store.Settings, error) {
 // every rollup row is keyed on it, so the day buckets are rewritten and the rollups
 // rebuilt before the call returns. The frontend shows a rebuilding state for the duration.
 func (s *SettingsService) Update(patch store.SettingsPatch) (store.Settings, error) {
+	if patch.SleepMode != "" && !config.ValidSleepMode(patch.SleepMode) {
+		return store.Settings{}, errors.New("invalid sleep mode: " + patch.SleepMode)
+	}
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
 	ctx := context.Background()
 	db := s.deps.DB
 
@@ -207,8 +218,10 @@ func (s *SettingsService) Update(patch store.SettingsPatch) (store.Settings, err
 		}
 		return db.SetSetting(ctx, key, strconv.FormatBool(*value))
 	}
-	if err := setBool(store.SettingSleepEnabled, patch.SleepEnabled); err != nil {
-		return store.Settings{}, err
+	if patch.SleepMode != "" {
+		if err := db.SetSetting(ctx, store.SettingSleepMode, patch.SleepMode); err != nil {
+			return store.Settings{}, err
+		}
 	}
 	if err := setBool(store.SettingPreventSystemSleep, patch.PreventSystemSleep); err != nil {
 		return store.Settings{}, err
@@ -259,7 +272,7 @@ func (s *SettingsService) applyToConfig(settings store.Settings) {
 		ServerHost:            settings.ServerHost,
 		ServerPort:            int(settings.ServerPort),
 		AutoSyncPrices:        settings.AutoSyncPrices,
-		SleepEnabled:          settings.SleepEnabled,
+		SleepMode:             settings.SleepMode,
 		SleepAfter:            time.Duration(settings.SleepAfterS) * time.Second,
 		SleepActiveWindow:     time.Duration(settings.SleepActiveWindowS) * time.Second,
 		PreventSystemSleep:    settings.PreventSystemSleep,

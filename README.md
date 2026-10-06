@@ -160,29 +160,40 @@ database and overlays them without a restart.
 | `AGENTS_DASHBOARD_SERVER_HOST` | `localhost` | HTTP bind host (server build) |
 | `AGENTS_DASHBOARD_SERVER_PORT` | `8080` | HTTP bind port (server build) |
 | `AGENTS_DASHBOARD_AUTO_SYNC_PRICES` | `true` | Download the price catalog at startup |
-| `AGENTS_DASHBOARD_SLEEP_ENABLED` | `false` | Keep the machine awake while an agent is active |
+| `AGENTS_DASHBOARD_SLEEP_MODE` | `off` | Sleep prevention policy: `off`, `agent`, or `always` |
 | `AGENTS_DASHBOARD_SLEEP_AFTER` | `5m` | Delay before sleeping once every agent stops |
 | `AGENTS_DASHBOARD_SLEEP_ACTIVE_WINDOW` | `2m` | How recently a session must have written to count as active |
-| `AGENTS_DASHBOARD_PREVENT_SYSTEM_SLEEP` | `true` | Hold off idle system sleep while an agent is active |
-| `AGENTS_DASHBOARD_PREVENT_DISPLAY_SLEEP` | `true` | Hold off display sleep while an agent is active |
+| `AGENTS_DASHBOARD_PREVENT_SYSTEM_SLEEP` | `true` | Prevent idle system sleep under the selected policy |
+| `AGENTS_DASHBOARD_PREVENT_DISPLAY_SLEEP` | `true` | Prevent display sleep under the selected policy |
 | `AGENTS_DASHBOARD_PREVENT_LID_SLEEP` | `false` | Keep running with the lid closed (see below) |
 
 The database lives at `<AGENTS_DASHBOARD_HOME>/dashboard.db`, the log at
 `<AGENTS_DASHBOARD_HOME>/agents-dashboard.log`. Delete both to start over — the next scan
 rebuilds everything from the agent files.
 
-### Sleep control and the menu bar
+### Sleep prevention and the menu bar
 
-**Settings → Sleep control** and the menu-bar icon share the same switches. While an agent
-process is running **and** its session file or database was written within the active window,
-the machine is held awake with the selected assertions; once every agent stops, the machine
-sleeps after the configured delay — but only if the keyboard and mouse are idle too, so a
-desktop in use is never suspended. A session that is open but idle does not hold the machine
-awake, and before any agent has run the feature stays out of the way.
+**Settings → Sleep prevention** and the menu bar share one policy choice and the same
+system/display/lid scopes. Saved changes update both surfaces immediately:
+
+- **Off** leaves ordinary sleep to the operating system, retaining the selected scopes.
+- **While an agent is active** holds the selected assertions while an agent process is running
+  **and** its session was written within the active window. After activity stops, it sleeps
+  after the configured delay only when the keyboard and mouse are idle. Before any agent has
+  run, it does not start a countdown.
+- **Always prevent sleep** continuously holds the selected assertions while the app is running,
+  even without an agent. It never starts a countdown or automatically suspends the machine.
+  The system scope must be selected to prevent idle system sleep; selecting no scopes holds
+  nothing and the status says so.
+
+The two durations apply only to agent mode and are retained when switching modes. Existing
+stored enabled/disabled settings migrate once to `agent`/`off` without changing scopes or
+durations. The new environment variable replaces `AGENTS_DASHBOARD_SLEEP_ENABLED`; the old
+variable is no longer read.
 
 | | Keep-awake | Display | Lid closed | Sleep now | Display now | Screensaver |
 |---|---|---|---|---|---|---|
-| macOS | `caffeinate -i` | `caffeinate -d` | `caffeinate -s` on AC, or one admin prompt to set `pmset disablesleep` | `pmset sleepnow` | `pmset displaysleepnow` | `ScreenSaverEngine` |
+| macOS | `caffeinate -i` | `caffeinate -d` | `caffeinate -s` on AC, or administrator-authorized `pmset disablesleep` | `pmset sleepnow` | `pmset displaysleepnow` | `ScreenSaverEngine` |
 | Windows | `SetThreadExecutionState` | `+ ES_DISPLAY_REQUIRED` | no supported API | `SetSuspendState` | `SC_MONITORPOWER` broadcast | `SC_SCREENSAVE` broadcast |
 | Linux | `systemd-inhibit --what=idle:sleep` | best-effort (may be unavailable on Wayland) | `handle-lid-switch` | `systemctl suspend` | `xset dpms force off` | `xdg-screensaver activate` |
 
@@ -193,14 +204,19 @@ suspending, and **Start screensaver** switches the session to the screensaver. I
 **Session usage (today)** section and the menu-bar count report every token — input, cache
 reads, cache writes and output — not just input plus output.
 
-The lid-closed switch is the one with a side effect: on macOS, keeping a laptop running with
-the lid closed on battery needs the kernel `SleepDisabled` flag, which asks for an
-administrator password **once**. That flag blocks *every* sleep on the machine, including
-**Sleep** from the Apple menu, so the app clears it again as soon as the switch (or the sleep
-control itself) is turned off, and **Sleep now** clears it before suspending. Declining the
-prompt falls back to `caffeinate -s`, which only works on AC power. If a prompt was declined,
-press **Restore system sleep** in **Settings → Sleep control**. The headless server build has
-no menu bar and never asserts sleep control.
+The lid-closed scope has a separate, machine-wide side effect on macOS: keeping a laptop
+running on battery with its lid closed needs the kernel `SleepDisabled` flag. Only an explicit
+eligible save requests administrator authorization; startup and refresh never request enabling
+it. Authorization may succeed without displaying a password prompt, so a cancel-only smoke
+check must simulate failure at the API boundary rather than assume a prompt will appear.
+
+That flag blocks *every* sleep, including **Sleep** from the Apple menu, and can outlive the
+app. The app attempts to clear it when lid prevention or the policy is turned off, and before
+**Sleep now**. **Restore system sleep**, available in both Settings and the menu bar, also
+clears it; errors remain visible if restoration fails. Declining authorization keeps
+the saved lid choice and falls back to `caffeinate -s`, which only works on AC power. Ordinary
+assertions are released on Quit. The headless server has no native menu bar; sleep control
+still follows the host platform's capabilities and the saved policy.
 
 On macOS the window's close button **hides the app into the menu bar**: the window is hidden
 rather than destroyed, the Dock tile and application menu disappear (the app switches to the

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/vietlubu/agents-dashboard/internal/config"
 	"github.com/vietlubu/agents-dashboard/internal/service"
 	"github.com/vietlubu/agents-dashboard/internal/sleep"
 	"github.com/vietlubu/agents-dashboard/internal/store"
@@ -47,33 +48,38 @@ func openMainWindow(app *application.App) {
 	window.Show()
 }
 
-// trayRefreshTick is how often the menu bar re-reads today's totals and the sleep status.
-// The values change on scan boundaries, so a slow poll is enough and costs one aggregate
-// read and a status snapshot.
+// trayRefreshTick updates today's totals and provides a fallback status snapshot.
+// Sleep and settings changes request an immediate refresh through the same loop.
 const trayRefreshTick = 30 * time.Second
 
 // trayLabels are the menu-bar strings for one locale. The tray lives in Go, outside the
 // Vue i18n bundle, so it carries its own small table and follows settings.locale.
 type trayLabels struct {
-	title, keepAwake, display, lid     string
-	sleepNow, dispNow, screensaver     string
-	usage, total, input, cache, output string
-	status, show, quit                 string
-	confirmTitle, confirmMsg           string
-	confirmSleep, confirmCancel        string
+	title, mode, modeOff, modeAgent, modeAlways string
+	system, display, lid, restore               string
+	sleepNow, dispNow, screensaver              string
+	usage, total, input, cache, output          string
+	status, show, quit                          string
+	confirmTitle, confirmMsg                    string
+	confirmSleep, confirmCancel                 string
 
-	stUnsupported, stDisabled, stActive string
-	stGrace, stWaitingUser, stSleeping  string
-	stIdle                              string
+	stUnsupported, stDisabled, stActive  string
+	stGrace, stWaitingUser, stSleeping   string
+	stIdle, stAlways, stError, noTargets string
 }
 
 func trayLabelsFor(locale string) trayLabels {
 	if locale == "vi" {
 		return trayLabels{
 			title:         "Agents Dashboard",
-			keepAwake:     "Gi\u1eef m\u00e1y th\u1ee9c khi c\u00f3 agent ho\u1ea1t \u0111\u1ed9ng",
-			display:       "Ch\u1ed1ng sleep m\u00e0n h\u00ecnh",
+			mode:          "Chế độ chặn sleep",
+			modeOff:       "Tắt",
+			modeAgent:     "Khi agent hoạt động",
+			modeAlways:    "Luôn chặn sleep",
+			system:        "Chặn sleep hệ thống",
+			display:       "Chặn sleep màn hình",
 			lid:           "Gi\u1eef m\u00e1y ch\u1ea1y khi g\u1eadp n\u1eafp",
+			restore:       "Khôi phục sleep hệ thống",
 			sleepNow:      "Ng\u1ee7 ngay",
 			dispNow:       "T\u1eaft m\u00e0n h\u00ecnh",
 			screensaver:   "B\u1eadt screensaver",
@@ -90,20 +96,28 @@ func trayLabelsFor(locale string) trayLabels {
 			confirmSleep:  "Sleep",
 			confirmCancel: "Hu\u1ef7",
 
-			stUnsupported: "kh\u00f4ng h\u1ed7 tr\u1ee3 tr\u00ean h\u1ec7 \u0111i\u1ec1u h\u00e0nh n\u00e0y",
-			stDisabled:    "\u0111ang t\u1eaft",
-			stActive:      "\u0111ang gi\u1eef m\u00e1y th\u1ee9c",
-			stGrace:       "ch\u1edd sleep",
-			stWaitingUser: "ch\u1edd ng\u01b0\u1eddi d\u00f9ng r\u1eddi m\u00e1y",
-			stSleeping:    "\u0111ang sleep",
-			stIdle:        "kh\u00f4ng ho\u1ea1t \u0111\u1ed9ng",
+			stUnsupported: "Không hỗ trợ",
+			stDisabled:    "Đang tắt",
+			stActive:      "Đang giữ máy thức",
+			stGrace:       "Đang đếm ngược tới lúc ngủ",
+			stWaitingUser: "Chờ người dùng rời máy",
+			stSleeping:    "Đang ngủ",
+			stIdle:        "Rảnh",
+			stAlways:      "Đang chặn sleep liên tục",
+			stError:       "Lỗi điều khiển sleep",
+			noTargets:     "Chưa chọn mục nào cần chặn sleep.",
 		}
 	}
 	return trayLabels{
 		title:         "Agents Dashboard",
-		keepAwake:     "Keep awake while an agent is active",
+		mode:          "Sleep prevention mode",
+		modeOff:       "Off",
+		modeAgent:     "While an agent is active",
+		modeAlways:    "Always prevent sleep",
+		system:        "Prevent system sleep",
 		display:       "Prevent display sleep",
-		lid:           "Prevent sleep with the lid closed",
+		lid:           "Keep running with the lid closed",
+		restore:       "Restore system sleep",
 		sleepNow:      "Sleep now",
 		dispNow:       "Turn off display",
 		screensaver:   "Start screensaver",
@@ -120,13 +134,16 @@ func trayLabelsFor(locale string) trayLabels {
 		confirmSleep:  "Sleep",
 		confirmCancel: "Cancel",
 
-		stUnsupported: "not supported on this platform",
-		stDisabled:    "off",
-		stActive:      "holding the machine awake",
-		stGrace:       "countdown to sleep",
-		stWaitingUser: "waiting for the user to step away",
-		stSleeping:    "sleeping",
-		stIdle:        "idle",
+		stUnsupported: "Unsupported",
+		stDisabled:    "Off",
+		stActive:      "Holding the machine awake",
+		stGrace:       "Countdown to sleep",
+		stWaitingUser: "Waiting for the user to step away",
+		stSleeping:    "Sleeping",
+		stIdle:        "Idle",
+		stAlways:      "Preventing sleep continuously",
+		stError:       "Sleep control error",
+		noTargets:     "No sleep prevention targets are selected.",
 	}
 }
 
@@ -144,9 +161,14 @@ type tray struct {
 	show  *application.MenuItem
 	quit  *application.MenuItem
 
-	keepAwake   *application.MenuItem
+	modeHeading *application.MenuItem
+	modeOff     *application.MenuItem
+	modeAgent   *application.MenuItem
+	modeAlways  *application.MenuItem
+	sysSleep    *application.MenuItem
 	dispSleep   *application.MenuItem
 	lidSleep    *application.MenuItem
+	restore     *application.MenuItem
 	sleepNow    *application.MenuItem
 	dispNow     *application.MenuItem
 	screensaver *application.MenuItem
@@ -156,15 +178,17 @@ type tray struct {
 	cache       *application.MenuItem
 	output      *application.MenuItem
 
-	locale string
-	labels trayLabels
-	busy   bool
+	locale      string
+	labels      trayLabels
+	refreshKick chan struct{}
+	stop        chan struct{}
 }
 
 // setupTray creates the menu bar (desktop builds only). A duplicate registration would
 // error, so it is created exactly once from main.
 func setupTray(app *application.App, setSvc *service.SettingsService, sleepSvc *service.SleepService) {
-	t := &tray{app: app, sleepSvc: sleepSvc, setSvc: setSvc}
+	t := &tray{app: app, sleepSvc: sleepSvc, setSvc: setSvc,
+		refreshKick: make(chan struct{}, 1), stop: make(chan struct{})}
 	t.locale = t.localeOf()
 	t.labels = trayLabelsFor(t.locale)
 	l := t.labels
@@ -174,12 +198,23 @@ func setupTray(app *application.App, setSvc *service.SettingsService, sleepSvc *
 	t.title.SetEnabled(false)
 	menu.AddSeparator()
 
-	t.keepAwake = menu.AddCheckbox(l.keepAwake, false)
+	t.modeHeading = menu.Add(l.mode)
+	t.modeHeading.SetEnabled(false)
+	t.modeOff = menu.AddRadio(l.modeOff, true)
+	t.modeAgent = menu.AddRadio(l.modeAgent, false)
+	t.modeAlways = menu.AddRadio(l.modeAlways, false)
+	t.modeOff.OnClick(func(*application.Context) { t.setSleepMode(config.SleepModeOff) })
+	t.modeAgent.OnClick(func(*application.Context) { t.setSleepMode(config.SleepModeAgent) })
+	t.modeAlways.OnClick(func(*application.Context) { t.setSleepMode(config.SleepModeAlways) })
+	menu.AddSeparator()
+	t.sysSleep = menu.AddCheckbox(l.system, true)
+	t.sysSleep.OnClick(func(*application.Context) { t.toggleSystem() })
 	t.dispSleep = menu.AddCheckbox(l.display, true)
 	t.lidSleep = menu.AddCheckbox(l.lid, false)
-	t.keepAwake.OnClick(func(*application.Context) { t.toggleSleepEnabled() })
 	t.dispSleep.OnClick(func(*application.Context) { t.toggleDisplay() })
 	t.lidSleep.OnClick(func(*application.Context) { t.toggleLid() })
+	t.restore = menu.Add(l.restore)
+	t.restore.OnClick(func(*application.Context) { t.restoreClamshell() })
 
 	menu.AddSeparator()
 	t.sleepNow = menu.Add(l.sleepNow)
@@ -220,6 +255,14 @@ func setupTray(app *application.App, setSvc *service.SettingsService, sleepSvc *
 	}
 	t.item.SetMenu(menu)
 
+	settingsOff := app.Event.On(service.EventSettingsSaved, func(*application.CustomEvent) { t.requestRefresh() })
+	sleepOff := app.Event.On(service.EventSleepStatus, func(*application.CustomEvent) { t.requestRefresh() })
+	app.OnShutdown(func() {
+		settingsOff()
+		sleepOff()
+		close(t.stop)
+	})
+
 	t.refresh()
 	go t.loop()
 }
@@ -227,8 +270,22 @@ func setupTray(app *application.App, setSvc *service.SettingsService, sleepSvc *
 func (t *tray) loop() {
 	ticker := time.NewTicker(trayRefreshTick)
 	defer ticker.Stop()
-	for range ticker.C {
-		t.refresh()
+	for {
+		select {
+		case <-ticker.C:
+			t.refresh()
+		case <-t.refreshKick:
+			t.refresh()
+		case <-t.stop:
+			return
+		}
+	}
+}
+
+func (t *tray) requestRefresh() {
+	select {
+	case t.refreshKick <- struct{}{}:
+	default:
 	}
 }
 
@@ -250,13 +307,17 @@ func (t *tray) current() *store.Settings {
 	return &s
 }
 
-func (t *tray) toggleSleepEnabled() {
+func (t *tray) setSleepMode(mode string) {
+	t.save(store.SettingsPatch{SleepMode: mode})
+}
+
+func (t *tray) toggleSystem() {
 	s := t.current()
 	if s == nil {
 		return
 	}
-	s.SleepEnabled = !s.SleepEnabled
-	t.save(*s)
+	s.PreventSystemSleep = !s.PreventSystemSleep
+	t.save(store.SettingsPatch{PreventSystemSleep: &s.PreventSystemSleep})
 }
 
 func (t *tray) toggleDisplay() {
@@ -265,7 +326,7 @@ func (t *tray) toggleDisplay() {
 		return
 	}
 	s.PreventDisplaySleep = !s.PreventDisplaySleep
-	t.save(*s)
+	t.save(store.SettingsPatch{PreventDisplaySleep: &s.PreventDisplaySleep})
 }
 
 func (t *tray) toggleLid() {
@@ -274,7 +335,7 @@ func (t *tray) toggleLid() {
 		return
 	}
 	s.PreventLidClosedSleep = !s.PreventLidClosedSleep
-	t.save(*s)
+	t.save(store.SettingsPatch{PreventLidClosedSleep: &s.PreventLidClosedSleep})
 }
 
 // requestSleepNow puts the machine to sleep on demand. When an agent is still working it
@@ -293,7 +354,7 @@ func (t *tray) requestSleepNow() {
 // confirmSleepNow asks whether to sleep while an agent is working, then sleeps only on the
 // affirmative button.
 func (t *tray) confirmSleepNow() {
-	l := t.labels
+	l := trayLabelsFor(t.localeOf())
 	dlg := t.app.Dialog.Question()
 	dlg.SetTitle(l.confirmTitle)
 	dlg.SetMessage(l.confirmMsg)
@@ -308,38 +369,63 @@ func (t *tray) displaySleepNow() { _ = t.sleepSvc.DisplaySleepNow() }
 // startScreensaver switches the session to the screensaver.
 func (t *tray) startScreensaver() { _ = t.sleepSvc.ScreensaverNow() }
 
-// save persists the three sleep toggles as one patch and refreshes the menu bar. The busy
-// flag stops the periodic refresh from fighting an in-flight toggle.
-func (t *tray) save(s store.Settings) {
-	t.busy = true
-	_, err := t.setSvc.Update(store.SettingsPatch{
-		SleepEnabled:          &s.SleepEnabled,
-		PreventDisplaySleep:   &s.PreventDisplaySleep,
-		PreventLidClosedSleep: &s.PreventLidClosedSleep,
-	})
-	t.busy = false
+// save persists only the fields changed by a menu action.
+func (t *tray) save(patch store.SettingsPatch) {
+	_, err := t.setSvc.Update(patch)
+	defer t.requestRefresh()
 	if err != nil {
+		t.showSleepError(err)
 		return
 	}
-	t.refresh()
+	requestLid := (patch.PreventLidClosedSleep != nil && *patch.PreventLidClosedSleep) ||
+		patch.SleepMode == config.SleepModeAgent || patch.SleepMode == config.SleepModeAlways
+	effective := t.current()
+	if requestLid && effective != nil && effective.SleepMode != config.SleepModeOff &&
+		effective.PreventLidClosedSleep && t.sleepSvc.ClamshellSupported() && !t.sleepSvc.Status().Clamshell {
+		if err := t.sleepSvc.RequestClamshell(); err != nil {
+			t.showSleepError(err)
+		}
+	}
+}
+
+func (t *tray) showSleepError(err error) {
+	l := trayLabelsFor(t.localeOf())
+	dlg := t.app.Dialog.Error()
+	dlg.SetTitle(l.stError)
+	dlg.SetMessage(err.Error())
+	dlg.Show()
+}
+
+func (t *tray) restoreClamshell() {
+	if err := t.sleepSvc.RestoreClamshell(); err != nil {
+		t.showSleepError(err)
+	}
+	t.requestRefresh()
 }
 
 // refresh repaints the menu bar from the persisted settings, the controller status and
 // today's totals. A locale change rewrites the static labels too.
 func (t *tray) refresh() {
-	if t.busy {
-		return
-	}
 	s := t.current()
 	if s != nil {
 		t.applyLabels(s.Locale)
-		t.keepAwake.SetChecked(s.SleepEnabled)
+		t.modeOff.SetChecked(s.SleepMode == config.SleepModeOff)
+		t.modeAgent.SetChecked(s.SleepMode == config.SleepModeAgent)
+		t.modeAlways.SetChecked(s.SleepMode == config.SleepModeAlways)
 		t.dispSleep.SetChecked(s.PreventDisplaySleep)
+		t.sysSleep.SetChecked(s.PreventSystemSleep)
 		t.lidSleep.SetChecked(s.PreventLidClosedSleep)
 	}
 
 	l := t.labels
 	st := t.sleepSvc.Status()
+	t.modeAgent.SetEnabled(st.Supported)
+	t.modeAlways.SetEnabled(st.Supported)
+	scopesEnabled := s != nil && s.SleepMode != config.SleepModeOff && st.Supported
+	t.sysSleep.SetEnabled(scopesEnabled)
+	t.dispSleep.SetEnabled(scopesEnabled)
+	t.lidSleep.SetEnabled(scopesEnabled)
+	t.restore.SetEnabled(st.Clamshell)
 	t.status.SetLabel(l.status + t.statusText(st))
 
 	tot, err := t.sleepSvc.Today()
@@ -371,9 +457,14 @@ func (t *tray) applyLabels(locale string) {
 	t.labels = trayLabelsFor(locale)
 	l := t.labels
 	t.title.SetLabel(l.title)
-	t.keepAwake.SetLabel(l.keepAwake)
+	t.modeHeading.SetLabel(l.mode)
+	t.modeOff.SetLabel(l.modeOff)
+	t.modeAgent.SetLabel(l.modeAgent)
+	t.modeAlways.SetLabel(l.modeAlways)
+	t.sysSleep.SetLabel(l.system)
 	t.dispSleep.SetLabel(l.display)
 	t.lidSleep.SetLabel(l.lid)
+	t.restore.SetLabel(l.restore)
 	t.sleepNow.SetLabel(l.sleepNow)
 	t.dispNow.SetLabel(l.dispNow)
 	t.screensaver.SetLabel(l.screensaver)
@@ -384,14 +475,25 @@ func (t *tray) applyLabels(locale string) {
 
 func (t *tray) statusText(st sleep.Status) string {
 	l := t.labels
+	if st.Error != "" {
+		return l.stError + ": " + st.Error
+	}
 	if !st.Supported {
 		return l.stUnsupported
 	}
-	if !st.Enabled {
+	if st.Mode == config.SleepModeOff {
 		return l.stDisabled
 	}
 	switch st.Detail {
+	case "always":
+		if !st.KeepingAwake {
+			return l.noTargets
+		}
+		return l.stAlways
 	case "active":
+		if !st.KeepingAwake {
+			return l.noTargets
+		}
 		return l.stActive
 	case "grace":
 		if st.SleepAtMs > 0 {

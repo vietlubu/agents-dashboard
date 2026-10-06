@@ -31,6 +31,7 @@ const showSyncStatus = computed(() => route.path === "/settings");
 onMounted(async () => {
   update.start();
   sleep.start();
+  settings.start();
   await settings.load();
   applyTheme(settings.theme);
   locale.value = settings.locale;
@@ -47,6 +48,7 @@ onMounted(async () => {
 onUnmounted(() => {
   update.stop();
   sleep.stop();
+  settings.stop();
 });
 </script>
 

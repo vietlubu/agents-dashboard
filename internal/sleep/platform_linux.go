@@ -57,7 +57,7 @@ func (i *linuxInhibitor) Apply(spec InhibitSpec) error {
 		"--what="+what,
 		"--mode=block",
 		"--who=Agents Dashboard",
-		"--why=agent session active",
+		"--why=sleep prevention enabled",
 		"sleep", "infinity")
 	if err := cmd.Start(); err != nil {
 		i.spec = InhibitSpec{}

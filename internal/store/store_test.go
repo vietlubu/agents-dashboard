@@ -27,6 +27,147 @@ func sampleEvent(key string, ts int64, total int64) Event {
 	}
 }
 
+func TestSleepModeMigration(t *testing.T) {
+	cases := []struct {
+		name     string
+		legacy   string
+		existing string
+		want     string
+	}{
+		{name: "missing"},
+		{name: "invalid", legacy: "invalid"},
+		{name: "whitespace", legacy: " true "},
+		{name: "mixed_case", legacy: "TrUe"},
+		{name: "existing", legacy: "true", existing: "always", want: "always"},
+		{name: "existing_without_legacy", existing: "always", want: "always"},
+		{name: "existing_with_invalid_legacy", legacy: "invalid", existing: "always", want: "always"},
+		{name: "existing_invalid_mode", legacy: "false", existing: "invalid", want: "invalid"},
+	}
+	for _, legacy := range []string{"1", "t", "T", "TRUE", "true", "True", "0", "f", "F", "FALSE", "false", "False"} {
+		want := "off"
+		if enabled, _ := strconv.ParseBool(legacy); enabled {
+			want = "agent"
+		}
+		cases = append(cases, struct {
+			name     string
+			legacy   string
+			existing string
+			want     string
+		}{name: "legacy_" + legacy, legacy: legacy, want: want})
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			path := filepath.Join(t.TempDir(), "migration.db")
+			db, err := Open(path)
+			if err != nil {
+				t.Fatalf("Open fixture: %v", err)
+			}
+			t.Cleanup(func() {
+				if db != nil {
+					_ = db.Close()
+				}
+			})
+			if tc.legacy != "" {
+				if err := db.SetSetting(ctx, "sleep_enabled", tc.legacy); err != nil {
+					t.Fatalf("seed legacy: %v", err)
+				}
+			}
+			if tc.existing != "" {
+				if err := db.SetSetting(ctx, SettingSleepMode, tc.existing); err != nil {
+					t.Fatalf("seed existing mode: %v", err)
+				}
+			}
+			event := sampleEvent("before-migration", 1_700_000_000_000, 42)
+			if _, _, err := db.InsertEvents(ctx, []Event{event}, time.UTC); err != nil {
+				t.Fatalf("seed usage event: %v", err)
+			}
+			if _, err := db.Writer().ExecContext(ctx, "PRAGMA user_version = 1"); err != nil {
+				t.Fatalf("seed version: %v", err)
+			}
+			if err := db.Close(); err != nil {
+				t.Fatalf("close fixture: %v", err)
+			}
+			db, err = Open(path)
+			if err != nil {
+				t.Fatalf("Open migrated: %v", err)
+			}
+			mode, ok, err := db.GetSetting(ctx, SettingSleepMode)
+			if err != nil || ok != (tc.want != "") || mode != tc.want {
+				t.Errorf("migrated mode = %q, %v, %v; want %q", mode, ok, err, tc.want)
+			}
+			if _, ok, err := db.GetSetting(ctx, "sleep_enabled"); err != nil || ok {
+				t.Errorf("legacy key remains: %v, %v", ok, err)
+			}
+			var version int
+			if err := db.Reader().QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+				t.Fatalf("read version: %v", err)
+			}
+			if version != 2 {
+				t.Errorf("schema version = %d, want 2", version)
+			}
+			page, err := db.Events(ctx, RangeQuery{}, 0, 10)
+			if err != nil {
+				t.Fatalf("read usage event: %v", err)
+			}
+			if page.Total != 1 || len(page.Rows) != 1 || page.Rows[0].Total != event.Total || page.Rows[0].TS != event.TS {
+				t.Errorf("usage event changed: %+v", page)
+			}
+			// Once migrated, reopening must retain a newly selected mode.
+			nextMode := "always"
+			if tc.want == nextMode {
+				nextMode = "off"
+			}
+			if err := db.SetSetting(ctx, SettingSleepMode, nextMode); err != nil {
+				t.Fatalf("change mode: %v", err)
+			}
+			if err := db.Close(); err != nil {
+				t.Fatalf("close migrated: %v", err)
+			}
+			db, err = Open(path)
+			if err != nil {
+				t.Fatalf("reopen migrated: %v", err)
+			}
+			if mode, ok, err := db.GetSetting(ctx, SettingSleepMode); err != nil || !ok || mode != nextMode {
+				t.Errorf("reopened mode = %q, %v, %v; want %q", mode, ok, err, nextMode)
+			}
+		})
+	}
+}
+
+func TestSleepModeMigrationRollback(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	if err := db.SetSetting(ctx, "sleep_enabled", "true"); err != nil {
+		t.Fatalf("seed legacy: %v", err)
+	}
+	if _, err := db.Writer().ExecContext(ctx, "PRAGMA user_version = 1"); err != nil {
+		t.Fatalf("seed version: %v", err)
+	}
+	if _, err := db.Writer().ExecContext(ctx, `
+		CREATE TRIGGER reject_legacy_delete BEFORE DELETE ON settings
+		WHEN OLD.key = 'sleep_enabled'
+		BEGIN SELECT RAISE(ABORT, 'legacy delete rejected'); END`); err != nil {
+		t.Fatalf("seed failure trigger: %v", err)
+	}
+	if err := migrate(ctx, db.Writer()); err == nil {
+		t.Fatal("migration should fail when legacy deletion fails")
+	}
+	if mode, ok, err := db.GetSetting(ctx, SettingSleepMode); err != nil || ok {
+		t.Errorf("failed migration persisted mode = %q, %v, %v", mode, ok, err)
+	}
+	if legacy, ok, err := db.GetSetting(ctx, "sleep_enabled"); err != nil || !ok || legacy != "true" {
+		t.Errorf("failed migration changed legacy = %q, %v, %v", legacy, ok, err)
+	}
+	var version int
+	if err := db.Reader().QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		t.Fatalf("read version: %v", err)
+	}
+	if version != 1 {
+		t.Errorf("failed migration advanced schema version to %d", version)
+	}
+}
+
 // A later, smaller record for the same key must not shrink the row or move its time:
 // streaming duplicates collapse onto the completed record.
 func TestInsertEventsKeepsLargestAndEarliest(t *testing.T) {

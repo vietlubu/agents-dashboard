@@ -33,9 +33,8 @@ type Deps struct {
 
 // Controller owns the keep-awake state machine.
 //
-// It is deliberately decoupled from the sync loop: the sync engine only publishes a
-// "last changed" timestamp, and the controller decides from that plus the process list
-// whether to hold the machine awake or let it sleep.
+// It is deliberately decoupled from the sync loop. Agent mode uses session activity
+// and the process list; always mode holds the selected scopes without observing agents.
 type Controller struct {
 	cfg            *config.Config
 	activity       ActivityProvider
@@ -54,7 +53,9 @@ type Controller struct {
 	held       InhibitSpec
 	idleSince  time.Time
 	seenActive bool
-	clamshell  bool
+	// A committed non-agent mode must invalidate history even if kicks coalesce.
+	resetHistory bool
+	clamshell    bool
 	// clamshellFailed latches after a failed restore so a declined administrator prompt
 	// is not repeated on every tick.
 	clamshellFailed bool
@@ -88,6 +89,7 @@ func New(d Deps) *Controller {
 		log:            log,
 		onStatus:       d.OnStatus,
 		tick:           tick,
+		status:         Status{Mode: config.SleepModeOff, Supported: d.Supported},
 		stop:           make(chan struct{}),
 		done:           make(chan struct{}),
 		kick:           make(chan struct{}, 1),
@@ -123,6 +125,11 @@ func (c *Controller) Stop() {
 
 // Kick asks for an immediate reconcile, used when a setting or tray toggle changes.
 func (c *Controller) Kick() {
+	if c.cfg.Snapshot().SleepMode != config.SleepModeAgent {
+		c.mu.Lock()
+		c.resetHistory = true
+		c.mu.Unlock()
+	}
 	select {
 	case c.kick <- struct{}{}:
 	default:
@@ -176,7 +183,7 @@ func (c *Controller) RestoreClamshell() error {
 
 // SleepNow puts the machine to sleep immediately, regardless of the automatic state. Any
 // keep-awake assertion is released first so a blocking inhibitor cannot veto the explicit
-// request; the next tick re-applies it if an agent is still working.
+// request; the next tick re-applies it according to the selected mode.
 func (c *Controller) SleepNow() error {
 	if c.sleeper == nil {
 		return errUnsupported
@@ -208,9 +215,9 @@ func (c *Controller) ScreensaverNow() error {
 	return c.screensaver.StartScreensaver()
 }
 
-// ActiveNow reports whether an agent is working right now, independently of whether the
-// automatic sleep feature is enabled. The menu bar uses it to decide whether an explicit
-// Sleep now needs confirmation before it interrupts a running session.
+// ActiveNow reports whether an agent is working right now, independently of the sleep
+// prevention mode. The menu bar uses it to decide whether an explicit Sleep now needs
+// confirmation before it interrupts a running session.
 func (c *Controller) ActiveNow(ctx context.Context) bool {
 	if c.activity == nil {
 		return false
@@ -250,9 +257,13 @@ func (c *Controller) loop(ctx context.Context) {
 
 func (c *Controller) tickOnce(ctx context.Context) {
 	snap := c.cfg.Snapshot()
-	c.syncClamshell(snap.SleepEnabled && snap.PreventLidClosedSleep)
+	mode := snap.SleepMode
+	if !config.ValidSleepMode(mode) {
+		mode = config.SleepModeOff
+	}
+	c.syncClamshell(mode != config.SleepModeOff && snap.PreventLidClosedSleep)
 	st := Status{
-		Enabled:   snap.SleepEnabled,
+		Mode:      mode,
 		Supported: c.supported,
 	}
 
@@ -262,12 +273,31 @@ func (c *Controller) tickOnce(ctx context.Context) {
 		c.publish(st)
 		return
 	}
-	if !snap.SleepEnabled {
+	if mode == config.SleepModeOff {
 		c.setHeld(InhibitSpec{})
 		c.mu.Lock()
+		c.seenActive = false
 		c.idleSince = time.Time{}
+		c.resetHistory = false
 		c.mu.Unlock()
 		st.Detail = "disabled"
+		c.publish(st)
+		return
+	}
+
+	spec := InhibitSpec{
+		System:  snap.PreventSystemSleep,
+		Display: snap.PreventDisplaySleep,
+		Lid:     snap.PreventLidClosedSleep,
+	}
+	if mode == config.SleepModeAlways {
+		c.mu.Lock()
+		c.seenActive = false
+		c.idleSince = time.Time{}
+		c.resetHistory = false
+		c.mu.Unlock()
+		c.setHeld(spec)
+		st.Detail = "always"
 		c.publish(st)
 		return
 	}
@@ -276,19 +306,24 @@ func (c *Controller) tickOnce(ctx context.Context) {
 	if err != nil {
 		c.log.Warn("observe agent activity", "error", err)
 	}
+	c.mu.Lock()
+	if c.resetHistory {
+		c.seenActive = false
+		c.idleSince = time.Time{}
+		c.resetHistory = false
+		c.mu.Unlock()
+		// This observation started before the committed policy change. The queued kick
+		// will observe again; stale activity must not seed a new countdown.
+		st.Detail = "idle"
+		c.publish(st)
+		return
+	}
 	st.Active = act.Active
 	st.ActiveSessions = act.ActiveSessions
 	st.LastWriteMs = act.LastWriteMs
 	st.Agents = strings.Join(act.Processes, ", ")
 
-	spec := InhibitSpec{
-		System:  snap.PreventSystemSleep,
-		Display: snap.PreventDisplaySleep,
-		Lid:     snap.PreventLidClosedSleep,
-	}
-
 	if act.Active {
-		c.mu.Lock()
 		c.seenActive = true
 		c.idleSince = time.Time{}
 		c.mu.Unlock()
@@ -298,7 +333,6 @@ func (c *Controller) tickOnce(ctx context.Context) {
 		return
 	}
 
-	c.mu.Lock()
 	seen := c.seenActive
 	if seen && c.idleSince.IsZero() {
 		c.idleSince = time.Now()

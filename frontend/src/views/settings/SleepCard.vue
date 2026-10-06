@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import Card from "@/components/ui/Card.vue";
 import Toggle from "@/components/ui/Toggle.vue";
+import Select from "@/components/ui/Select.vue";
 import NumberInput from "@/components/ui/NumberInput.vue";
 import { useSettingsStore } from "@/stores/settings";
 import { useSleepStore } from "@/stores/sleep";
@@ -19,7 +21,13 @@ import * as sleepApi from "@/api/sleep";
 const settings = useSettingsStore();
 const sleep = useSleepStore();
 
-const enabled = ref(false);
+const { t } = useI18n();
+const mode = ref("off");
+const modeOptions = computed(() => [
+  { value: "off", label: t("settings.sleepModeOff") },
+  { value: "agent", label: t("settings.sleepModeAgent"), disabled: sleep.status?.supported === false },
+  { value: "always", label: t("settings.sleepModeAlways"), disabled: sleep.status?.supported === false },
+]);
 const system = ref(true);
 const display = ref(true);
 const lid = ref(false);
@@ -35,7 +43,7 @@ watch(
   () => settings.settings,
   (value) => {
     if (!value) return;
-    enabled.value = value.sleepEnabled;
+    mode.value = value.sleepMode;
     system.value = value.preventSystemSleep;
     display.value = value.preventDisplaySleep;
     lid.value = value.preventLidClosedSleep;
@@ -48,10 +56,13 @@ watch(
 void sleepApi.clamshellSupported().then((v) => (clamshellSupported.value = v));
 
 const statusKey = computed(() => {
+  if (sleep.status?.error) return "settings.statusError";
   const detail = sleep.status?.detail ?? "";
   switch (detail) {
+    case "always":
+      return sleep.keepingAwake ? "settings.statusAlways" : "settings.sleepNoTargets";
     case "active":
-      return "settings.statusActive";
+      return sleep.keepingAwake ? "settings.statusActive" : "settings.sleepNoTargets";
     case "grace":
       return "settings.statusGrace";
     case "waiting-user":
@@ -74,18 +85,20 @@ async function save() {
   error.value = "";
   clamshellError.value = "";
   const patch = settingsPatch({
-    sleepEnabled: enabled.value,
+    sleepMode: mode.value,
     preventSystemSleep: system.value,
     preventDisplaySleep: display.value,
     preventLidClosedSleep: lid.value,
-    sleepAfterSeconds: after.value,
-    sleepActiveWindowSeconds: activeWindow.value,
+    ...(mode.value === "agent" ? {
+      sleepAfterSeconds: after.value,
+      sleepActiveWindowSeconds: activeWindow.value,
+    } : {}),
   });
   try {
     await settings.update(patch);
-    // Enabling the lid toggle needs the system-level flag; ask for it once. If the prompt
-    // is declined the controller falls back to caffeinate, which only works on AC power.
-    if (lid.value && clamshellSupported.value && !clamshell.value) {
+    // Only an explicit Save may request the machine-wide flag; cancellation keeps the choice.
+    const effective = settings.settings;
+    if (effective && effective.sleepMode !== "off" && effective.preventLidClosedSleep && clamshellSupported.value && !clamshell.value) {
       try {
         await sleepApi.requestClamshell();
       } catch (err) {
@@ -112,7 +125,9 @@ async function restore() {
 
 <template>
   <Card :title="$t('settings.sleep')">
-    <p class="faint" style="margin-top: 0">{{ $t('settings.sleepHint') }}</p>
+    <p class="faint" style="margin-top: 0">
+      {{ $t(mode === 'off' ? 'settings.sleepOffHint' : mode === 'always' ? 'settings.sleepAlwaysHint' : 'settings.sleepHint') }}
+    </p>
 
     <div
       v-if="sleep.status && !sleep.status.supported"
@@ -122,9 +137,12 @@ async function restore() {
       {{ $t('settings.sleepUnsupported') }}
     </div>
 
-    <Toggle v-model="enabled" :label="$t('settings.sleepEnabled')" />
+    <div class="field">
+      <label for="sleep-mode">{{ $t('settings.sleepMode') }}</label>
+      <Select id="sleep-mode" v-model="mode" :options="modeOptions" />
+    </div>
 
-    <div class="grid grid-2" style="margin-top: 12px">
+    <div v-if="mode === 'agent'" class="grid grid-2" style="margin-top: 12px">
       <div class="field">
         <label for="sleep-after">{{ $t('settings.sleepAfter') }}</label>
         <NumberInput id="sleep-after" v-model="after" :min="30" />
@@ -135,11 +153,13 @@ async function restore() {
       </div>
     </div>
 
-    <div class="grid" style="gap: 8px; margin-top: 12px">
+    <fieldset :disabled="mode === 'off' || sleep.status?.supported === false" class="grid sleep-scopes" style="gap: 8px; margin-top: 12px">
       <Toggle v-model="system" :label="$t('settings.preventSystemSleep')" />
       <Toggle v-model="display" :label="$t('settings.preventDisplaySleep')" />
       <Toggle v-model="lid" :label="$t('settings.preventLidClosedSleep')" />
-    </div>
+    </fieldset>
+
+    <p v-if="mode !== 'off' && !system && !display && !lid" class="note">{{ $t('settings.sleepNoTargets') }}</p>
 
     <p v-if="clamshellSupported && lid" class="faint">{{ $t('settings.lidHint') }}</p>
 
@@ -150,6 +170,7 @@ async function restore() {
 
     <div v-if="sleep.status" class="faint" style="margin-top: 12px">
       {{ $t('settings.sleepStatus') }}: {{ $t(statusKey) }}
+      <span v-if="sleep.status.error">: {{ sleep.status.error }}</span>
     </div>
 
     <div class="row" style="margin-top: 14px">
@@ -163,3 +184,12 @@ async function restore() {
     <div v-if="clamshellError" class="note" style="margin-top: 8px">{{ clamshellError }}</div>
   </Card>
 </template>
+
+<style scoped>
+.sleep-scopes {
+  border: 0;
+  padding: 0;
+  margin-inline: 0;
+  min-width: 0;
+}
+</style>

@@ -202,7 +202,7 @@ it touched and commit them in the same turn — never leave finished work sittin
 |---|---|
 | `main.go` | wiring order: config → logger → store → catalog → engine → scheduler → `service.Deps` → 6 services → event registration → window → `app.Run()` |
 | `internal/service/service.go` | `Deps`, event-name consts, binding contract |
-| `internal/store/schema.go` | `schemaVersion = 1`, DDL applied via `PRAGMA user_version` — bump for migrations |
+| `internal/store/schema.go` | `schemaVersion = 2`, DDL and transactional settings migration via `PRAGMA user_version` — bump for migrations |
 | `internal/store/dto.go` | every JSON DTO crossing to the UI |
 | `internal/harness/harness.go` | `Adapter` interface + `Event`/`Batch` shapes and the privacy contract |
 | `internal/harness/registry.go` | harness registration, `ResolveRoots`, `AllWithHome` (test entry) |

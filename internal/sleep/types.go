@@ -1,9 +1,8 @@
-// Package sleep keeps the machine awake while a coding-agent session is working and puts
-// it to sleep once every session has stopped and the user has stepped away.
+// Package sleep applies selected sleep-prevention scopes continuously or while a coding
+// agent is active. Agent mode sleeps after sessions stop and the user has stepped away.
 //
-// Two signals decide "a session is active": an agent process is running AND its session
-// file or database was written recently. Requiring both means an editor left open on an
-// idle session does not hold the machine awake forever.
+// Agent activity requires both a running process and a recently written session file or
+// database, so an editor left open on an idle session does not hold the machine awake.
 package sleep
 
 import (
@@ -94,7 +93,7 @@ type ActivityProvider interface {
 // comparable, so the service can hand it straight to the frontend and the controller can
 // cheaply detect a change before emitting an event.
 type Status struct {
-	Enabled        bool     `json:"enabled"`
+	Mode           string   `json:"mode"`
 	Supported      bool     `json:"supported"`
 	KeepingAwake   bool     `json:"keepingAwake"`
 	Active         bool     `json:"active"`
@@ -105,7 +104,7 @@ type Status struct {
 	SleepAtMs      int64    `json:"sleepAtMs"`
 	Held           HeldSpec `json:"held"`
 	Clamshell      bool     `json:"clamshell"`
-	// Detail names the current phase: disabled, unsupported, active, grace,
+	// Detail names the current phase: disabled, unsupported, always, active, grace,
 	// waiting-user, sleeping or idle. It is meant for a status line, not for logic.
 	Detail string `json:"detail"`
 	Error  string `json:"error"`

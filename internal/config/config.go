@@ -21,9 +21,12 @@ const (
 	DefaultServerHost    = "localhost"
 	DefaultServerPort    = 8080
 
-	// Sleep control defaults. Keep-awake is opt-in, so the feature starts off; once on,
-	// the system and display are both held awake by default and the machine sleeps five
-	// minutes after the last agent activity.
+	// Sleep prevention is opt-in. Agent mode holds the selected targets while active,
+	// then sleeps after the configured delay when the user is idle.
+	SleepModeOff             = "off"
+	SleepModeAgent           = "agent"
+	SleepModeAlways          = "always"
+	DefaultSleepMode         = SleepModeOff
 	DefaultSleepAfter        = 5 * time.Minute
 	DefaultSleepActiveWindow = 2 * time.Minute
 	DefaultPreventSystem     = true
@@ -47,7 +50,7 @@ type Mutable struct {
 	// Sleep control. SleepAfter is how long the machine stays awake after the last
 	// agent activity before it is allowed to sleep; SleepActiveWindow is how recently a
 	// session must have written to count as active.
-	SleepEnabled          bool
+	SleepMode             string
 	SleepAfter            time.Duration
 	SleepActiveWindow     time.Duration
 	PreventSystemSleep    bool
@@ -60,7 +63,7 @@ type Config struct {
 	Home   string
 	DBPath string
 
-	// Warnings collected while loading (currently: an unparsable TZ). The settings
+	// Warnings collected while loading invalid environment overrides. The settings
 	// page surfaces them once instead of failing the process.
 	Warnings []string
 
@@ -106,12 +109,16 @@ func Load() (*Config, error) {
 		ServerPort:     envInt("AGENTS_DASHBOARD_SERVER_PORT", DefaultServerPort),
 		AutoSyncPrices: envBool("AGENTS_DASHBOARD_AUTO_SYNC_PRICES", true),
 
-		SleepEnabled:          envBool("AGENTS_DASHBOARD_SLEEP_ENABLED", false),
+		SleepMode:             envString("AGENTS_DASHBOARD_SLEEP_MODE", DefaultSleepMode),
 		SleepAfter:            envDuration("AGENTS_DASHBOARD_SLEEP_AFTER", DefaultSleepAfter),
 		SleepActiveWindow:     envDuration("AGENTS_DASHBOARD_SLEEP_ACTIVE_WINDOW", DefaultSleepActiveWindow),
 		PreventSystemSleep:    envBool("AGENTS_DASHBOARD_PREVENT_SYSTEM_SLEEP", DefaultPreventSystem),
 		PreventDisplaySleep:   envBool("AGENTS_DASHBOARD_PREVENT_DISPLAY_SLEEP", DefaultPreventDisplay),
 		PreventLidClosedSleep: envBool("AGENTS_DASHBOARD_PREVENT_LID_SLEEP", false),
+	}
+	if !ValidSleepMode(c.mutable.SleepMode) {
+		warnings = append(warnings, fmt.Sprintf("sleep mode %q is invalid; using off", c.mutable.SleepMode))
+		c.mutable.SleepMode = SleepModeOff
 	}
 	if c.mutable.Concurrency < 1 {
 		c.mutable.Concurrency = 1
@@ -163,7 +170,9 @@ func (c *Config) Apply(m Mutable) {
 	}
 	c.mutable.AutoSyncPrices = m.AutoSyncPrices
 
-	c.mutable.SleepEnabled = m.SleepEnabled
+	if ValidSleepMode(m.SleepMode) {
+		c.mutable.SleepMode = m.SleepMode
+	}
 	if m.SleepAfter > 0 {
 		c.mutable.SleepAfter = m.SleepAfter
 	}
@@ -173,6 +182,11 @@ func (c *Config) Apply(m Mutable) {
 	c.mutable.PreventSystemSleep = m.PreventSystemSleep
 	c.mutable.PreventDisplaySleep = m.PreventDisplaySleep
 	c.mutable.PreventLidClosedSleep = m.PreventLidClosedSleep
+}
+
+// ValidSleepMode reports whether mode is one of the supported sleep prevention modes.
+func ValidSleepMode(mode string) bool {
+	return mode == SleepModeOff || mode == SleepModeAgent || mode == SleepModeAlways
 }
 
 // resolveTimezone returns the IANA zone name and its location: an explicit name when given,

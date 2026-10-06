@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/vietlubu/agents-dashboard/internal/config"
 	"github.com/vietlubu/agents-dashboard/internal/sleep"
 	"github.com/vietlubu/agents-dashboard/internal/store"
 )
@@ -20,7 +21,7 @@ func NewSleepService(deps *Deps) *SleepService { return &SleepService{deps: deps
 // window) it reports the feature as unsupported rather than erroring.
 func (s *SleepService) Status() sleep.Status {
 	if s.deps.Sleep == nil {
-		return sleep.Status{Supported: false, Detail: "disabled"}
+		return sleep.Status{Mode: config.SleepModeOff, Supported: false, Detail: "unsupported"}
 	}
 	return s.deps.Sleep.Status()
 }

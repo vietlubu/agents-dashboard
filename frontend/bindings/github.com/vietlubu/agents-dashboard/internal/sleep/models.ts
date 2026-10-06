@@ -16,7 +16,7 @@ export interface HeldSpec {
  * cheaply detect a change before emitting an event.
  */
 export interface Status {
-    "enabled": boolean;
+    "mode": string;
     "supported": boolean;
     "keepingAwake": boolean;
     "active": boolean;
@@ -29,7 +29,7 @@ export interface Status {
     "clamshell": boolean;
 
     /**
-     * Detail names the current phase: disabled, unsupported, active, grace,
+     * Detail names the current phase: disabled, unsupported, always, active, grace,
      * waiting-user, sleeping or idle. It is meant for a status line, not for logic.
      */
     "detail": string;

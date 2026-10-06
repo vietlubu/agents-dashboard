@@ -374,12 +374,12 @@ type Settings struct {
 	Locale         string `json:"locale"`
 
 	// Sleep control.
-	SleepEnabled          bool  `json:"sleepEnabled"`
-	SleepAfterS           int64 `json:"sleepAfterSeconds"`
-	SleepActiveWindowS    int64 `json:"sleepActiveWindowSeconds"`
-	PreventSystemSleep    bool  `json:"preventSystemSleep"`
-	PreventDisplaySleep   bool  `json:"preventDisplaySleep"`
-	PreventLidClosedSleep bool  `json:"preventLidClosedSleep"`
+	SleepMode             string `json:"sleepMode"`
+	SleepAfterS           int64  `json:"sleepAfterSeconds"`
+	SleepActiveWindowS    int64  `json:"sleepActiveWindowSeconds"`
+	PreventSystemSleep    bool   `json:"preventSystemSleep"`
+	PreventDisplaySleep   bool   `json:"preventDisplaySleep"`
+	PreventLidClosedSleep bool   `json:"preventLidClosedSleep"`
 }
 
 // SettingsPatch is a partial settings update; empty/zero fields are ignored.
@@ -394,11 +394,11 @@ type SettingsPatch struct {
 	Theme          string `json:"theme"`
 	Locale         string `json:"locale"`
 
-	// Sleep control. The booleans are pointers so "off" is distinguishable from "unchanged".
-	SleepEnabled          *bool `json:"sleepEnabled"`
-	PreventSystemSleep    *bool `json:"preventSystemSleep"`
-	PreventDisplaySleep   *bool `json:"preventDisplaySleep"`
-	PreventLidClosedSleep *bool `json:"preventLidClosedSleep"`
-	SleepAfterS           int64 `json:"sleepAfterSeconds"`
-	SleepActiveWindowS    int64 `json:"sleepActiveWindowSeconds"`
+	// Sleep control. Empty mode is unchanged; bool pointers distinguish false from unchanged.
+	SleepMode             string `json:"sleepMode"`
+	PreventSystemSleep    *bool  `json:"preventSystemSleep"`
+	PreventDisplaySleep   *bool  `json:"preventDisplaySleep"`
+	PreventLidClosedSleep *bool  `json:"preventLidClosedSleep"`
+	SleepAfterS           int64  `json:"sleepAfterSeconds"`
+	SleepActiveWindowS    int64  `json:"sleepActiveWindowSeconds"`
 }

@@ -1,8 +1,10 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
+import { Events } from "@wailsio/runtime";
 import * as api from "@/api/settings";
 import type { SettingsModel } from "@/api/settings";
 import { applyTheme, type ThemeChoice } from "@/lib/theme";
+import { EVENTS } from "@/api/sync";
 
 /**
  * Application settings, backed by the database.
@@ -18,6 +20,9 @@ export const useSettingsStore = defineStore("settings", () => {
   const error = ref<string | null>(null);
   const warnings = ref<string[]>([]);
 
+  let unsubscribe: (() => void) | undefined;
+  let eventVersion = 0;
+
   const timezone = computed(() => settings.value?.tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
   const theme = computed<ThemeChoice>(() => (settings.value?.theme as ThemeChoice) ?? "system");
   const locale = computed(() => settings.value?.locale ?? "en");
@@ -25,9 +30,13 @@ export const useSettingsStore = defineStore("settings", () => {
   async function load() {
     loading.value = true;
     error.value = null;
+    const version = eventVersion;
     try {
-      settings.value = await api.get();
-      applyTheme(theme.value);
+      const value = await api.get();
+      if (version === eventVersion) {
+        settings.value = value;
+        applyTheme(theme.value);
+      }
     } catch (err) {
       error.value = String(err);
     } finally {
@@ -38,10 +47,14 @@ export const useSettingsStore = defineStore("settings", () => {
   async function update(patch: api.SettingsPatch) {
     saving.value = true;
     error.value = null;
+    const version = eventVersion;
     try {
-      settings.value = await api.update(patch);
-      applyTheme(theme.value);
-      return settings.value;
+      const value = await api.update(patch);
+      if (version === eventVersion) {
+        settings.value = value;
+        applyTheme(theme.value);
+      }
+      return value;
     } catch (err) {
       error.value = String(err);
       throw err;
@@ -50,5 +63,20 @@ export const useSettingsStore = defineStore("settings", () => {
     }
   }
 
-  return { settings, loading, saving, error, warnings, timezone, theme, locale, load, update };
+  function start() {
+    if (unsubscribe) return;
+    unsubscribe = Events.On(EVENTS.settingsSaved, (event: { data: SettingsModel }) => {
+      if (!event.data) return;
+      eventVersion++;
+      settings.value = event.data;
+      applyTheme(theme.value);
+    });
+  }
+
+  function stop() {
+    unsubscribe?.();
+    unsubscribe = undefined;
+  }
+
+  return { settings, loading, saving, error, warnings, timezone, theme, locale, load, update, start, stop };
 });
