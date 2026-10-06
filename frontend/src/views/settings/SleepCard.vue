@@ -13,10 +13,8 @@ import * as sleepApi from "@/api/sleep";
 /**
  * Sleep control.
  *
- * The backend decides when to hold the machine awake; this card only edits the settings and
- * surfaces the resulting status. The lid-closed toggle is the one with a side effect: on
- * macOS it raises one administrator prompt and disables system sleep system-wide until it is
- * restored, so the card always shows a way back.
+ * The backend decides when to prevent idle sleep; this card edits settings and surfaces
+ * status. Legacy machine-wide sleep disabling can only be restored explicitly.
  */
 const settings = useSettingsStore();
 const sleep = useSleepStore();
@@ -37,7 +35,6 @@ const activeWindow = ref(120);
 const saved = ref("");
 const error = ref("");
 const clamshellError = ref("");
-const clamshellSupported = ref(false);
 
 watch(
   () => settings.settings,
@@ -53,10 +50,9 @@ watch(
   { immediate: true }
 );
 
-void sleepApi.clamshellSupported().then((v) => (clamshellSupported.value = v));
-
 const statusKey = computed(() => {
   if (sleep.status?.error) return "settings.statusError";
+  if (sleep.status?.clamshell) return "settings.statusLegacySleepDisabled";
   const detail = sleep.status?.detail ?? "";
   switch (detail) {
     case "always":
@@ -96,15 +92,6 @@ async function save() {
   });
   try {
     await settings.update(patch);
-    // Only an explicit Save may request the machine-wide flag; cancellation keeps the choice.
-    const effective = settings.settings;
-    if (effective && effective.sleepMode !== "off" && effective.preventLidClosedSleep && clamshellSupported.value && !clamshell.value) {
-      try {
-        await sleepApi.requestClamshell();
-      } catch (err) {
-        clamshellError.value = String(err);
-      }
-    }
     saved.value = "settings.saved";
     await sleep.refresh();
   } catch (err) {
@@ -156,12 +143,12 @@ async function restore() {
     <fieldset :disabled="mode === 'off' || sleep.status?.supported === false" class="grid sleep-scopes" style="gap: 8px; margin-top: 12px">
       <Toggle v-model="system" :label="$t('settings.preventSystemSleep')" />
       <Toggle v-model="display" :label="$t('settings.preventDisplaySleep')" />
-      <Toggle v-model="lid" :label="$t('settings.preventLidClosedSleep')" />
+      <Toggle v-if="sleep.status?.lidSupported" v-model="lid" :label="$t('settings.preventLidClosedSleep')" />
     </fieldset>
 
-    <p v-if="mode !== 'off' && !system && !display && !lid" class="note">{{ $t('settings.sleepNoTargets') }}</p>
+    <p v-if="mode !== 'off' && !system && !display && !(sleep.status?.lidSupported && lid)" class="note">{{ $t('settings.sleepNoTargets') }}</p>
 
-    <p v-if="clamshellSupported && lid" class="faint">{{ $t('settings.lidHint') }}</p>
+    <p v-if="sleep.status && !sleep.status.lidSupported" class="faint">{{ $t('settings.lidHint') }}</p>
 
     <div v-if="clamshell" class="note row-wrap" style="margin-top: 12px">
       <span>{{ $t('settings.clamshellActive') }}</span>

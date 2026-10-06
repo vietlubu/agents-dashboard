@@ -19,6 +19,7 @@ export interface Status {
     "mode": string;
     "supported": boolean;
     "keepingAwake": boolean;
+    "lidSupported": boolean;
     "active": boolean;
     "activeSessions": number;
     "agents": string;

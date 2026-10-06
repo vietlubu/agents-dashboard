@@ -27,14 +27,6 @@ export function AgentActive(): $CancellablePromise<boolean> {
 }
 
 /**
- * ClamshellSupported reports whether the platform can keep the machine running with the
- * lid closed beyond AC power. Only macOS can, through an administrator prompt.
- */
-export function ClamshellSupported(): $CancellablePromise<boolean> {
-    return $Call.ByID(1282718077);
-}
-
-/**
  * DisplaySleepNow turns the display off now without suspending the machine.
  */
 export function DisplaySleepNow(): $CancellablePromise<void> {
@@ -42,15 +34,7 @@ export function DisplaySleepNow(): $CancellablePromise<void> {
 }
 
 /**
- * RequestClamshell raises the one administrator prompt needed to keep the machine running
- * with the lid closed. It is only ever called from an explicit user action.
- */
-export function RequestClamshell(): $CancellablePromise<void> {
-    return $Call.ByID(1234323450);
-}
-
-/**
- * RestoreClamshell undoes RequestClamshell, restoring the system's own lid behaviour.
+ * RestoreClamshell explicitly clears a legacy machine-wide sleep-disabled flag.
  */
 export function RestoreClamshell(): $CancellablePromise<void> {
     return $Call.ByID(1234382103);

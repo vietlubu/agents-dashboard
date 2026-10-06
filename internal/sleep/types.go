@@ -38,10 +38,9 @@ type Inhibitor interface {
 	Release() error
 }
 
-// ClamshellController is implemented by inhibitors that can keep the machine running with
-// the lid closed beyond AC power. It is optional and platform-specific (macOS pmset).
+// ClamshellController detects and explicitly restores a legacy machine-wide sleep flag.
+// It never enables lid prevention; normal assertions must not alter system policy.
 type ClamshellController interface {
-	RequestClamshell() error
 	RestoreClamshell() error
 	ClamshellActive() bool
 }
@@ -96,6 +95,7 @@ type Status struct {
 	Mode           string   `json:"mode"`
 	Supported      bool     `json:"supported"`
 	KeepingAwake   bool     `json:"keepingAwake"`
+	LidSupported   bool     `json:"lidSupported"`
 	Active         bool     `json:"active"`
 	ActiveSessions int64    `json:"activeSessions"`
 	Agents         string   `json:"agents"`

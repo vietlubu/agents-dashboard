@@ -16,6 +16,8 @@ import (
 // PlatformSupported reports that macOS can control sleep.
 func PlatformSupported() bool { return true }
 
+func platformLidSupported() bool { return false }
+
 func defaultInhibitor() Inhibitor           { return newDarwinInhibitor() }
 func defaultSleeper() Sleeper               { return darwinSleeper{} }
 func defaultDisplaySleeper() DisplaySleeper { return darwinDisplaySleeper{} }
@@ -42,7 +44,7 @@ func newDarwinInhibitor() *darwinInhibitor {
 func (i *darwinInhibitor) Apply(spec InhibitSpec) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	flags := caffeinateFlags(spec, i.clamshell)
+	flags := caffeinateFlags(spec)
 	if flags == i.flags && (i.cmd != nil || flags == "") {
 		return nil
 	}
@@ -77,9 +79,9 @@ func (i *darwinInhibitor) stopLocked() {
 	i.cmd = nil
 }
 
-// caffeinateFlags maps a spec to caffeinate's short flags. When the clamshell assertion is
-// already set by pmset, lid-close sleep is handled at the kernel level and needs no -s.
-func caffeinateFlags(spec InhibitSpec, clamshell bool) string {
+// caffeinateFlags holds only idle system/display assertions. Lid prevention is unsupported;
+// neither manual Sleep nor system-wide sleep policy is blocked by these assertions.
+func caffeinateFlags(spec InhibitSpec) string {
 	var parts []string
 	if spec.System {
 		parts = append(parts, "-i")
@@ -87,24 +89,11 @@ func caffeinateFlags(spec InhibitSpec, clamshell bool) string {
 	if spec.Display {
 		parts = append(parts, "-d")
 	}
-	if spec.Lid && !clamshell {
-		parts = append(parts, "-s")
-	}
 	return strings.Join(parts, " ")
 }
 
-func (i *darwinInhibitor) RequestClamshell() error {
-	if err := runAdminPmset("1"); err != nil {
-		return err
-	}
-	i.mu.Lock()
-	i.clamshell = true
-	i.mu.Unlock()
-	return nil
-}
-
 func (i *darwinInhibitor) RestoreClamshell() error {
-	if err := runAdminPmset("0"); err != nil {
+	if err := restoreAdminPmset(); err != nil {
 		return err
 	}
 	i.mu.Lock()
@@ -119,13 +108,13 @@ func (i *darwinInhibitor) ClamshellActive() bool {
 	return i.clamshell
 }
 
-// runAdminPmset sets the kernel SleepDisabled flag, which is the only way to keep a Mac
-// running with the lid closed on battery. It raises one administrator prompt.
-func runAdminPmset(value string) error {
-	script := fmt.Sprintf(`do shell script "/usr/bin/pmset -a disablesleep %s" with administrator privileges`, value)
+// restoreAdminPmset only clears the legacy SleepDisabled flag on explicit recovery.
+// Normal mode and scope changes never call this administrator operation.
+func restoreAdminPmset() error {
+	const script = `do shell script "/usr/bin/pmset -a disablesleep 0" with administrator privileges`
 	out, err := exec.Command("osascript", "-e", script).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("pmset disablesleep %s: %w: %s", value, err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("restore pmset disablesleep: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }

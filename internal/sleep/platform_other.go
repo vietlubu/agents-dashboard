@@ -7,6 +7,8 @@ import "time"
 // PlatformSupported reports that sleep control is unavailable on this platform.
 func PlatformSupported() bool { return false }
 
+func platformLidSupported() bool { return false }
+
 func defaultInhibitor() Inhibitor           { return noopInhibitor{} }
 func defaultSleeper() Sleeper               { return noopSleeper{} }
 func defaultDisplaySleeper() DisplaySleeper { return noopDisplaySleeper{} }

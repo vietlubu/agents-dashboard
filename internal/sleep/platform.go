@@ -10,6 +10,7 @@ type Platform struct {
 	Idler          Idler
 	Processes      ProcessLister
 	Supported      bool
+	LidSupported   bool
 }
 
 // DefaultPlatform returns the platform pieces for the current build.
@@ -22,5 +23,6 @@ func DefaultPlatform() Platform {
 		Idler:          defaultIdler(),
 		Processes:      DefaultProcessLister(),
 		Supported:      PlatformSupported(),
+		LidSupported:   platformLidSupported(),
 	}
 }

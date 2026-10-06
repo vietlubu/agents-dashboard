@@ -2,32 +2,41 @@
 
 package sleep
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestCaffeinateFlags(t *testing.T) {
-	cases := []struct {
-		name      string
-		spec      InhibitSpec
-		clamshell bool
-		want      string
-	}{
-		{"system only", InhibitSpec{System: true}, false, "-i"},
-		{"display only", InhibitSpec{Display: true}, false, "-d"},
-		{"lid uses -s on AC", InhibitSpec{Lid: true}, false, "-s"},
-		{"all three", InhibitSpec{System: true, Display: true, Lid: true}, false, "-i -d -s"},
-		{"clamshell handles lid via pmset", InhibitSpec{System: true, Display: true, Lid: true}, true, "-i -d"},
-		{"lid alone under clamshell needs no process", InhibitSpec{Lid: true}, true, ""},
-		{"empty", InhibitSpec{}, false, ""},
-	}
-	for _, tc := range cases {
-		if got := caffeinateFlags(tc.spec, tc.clamshell); got != tc.want {
-			t.Errorf("%s: caffeinateFlags = %q, want %q", tc.name, got, tc.want)
+	// Exhaust every scope combination: lid must never add a system-wide -s assertion.
+	for scopes := range 8 {
+		spec := InhibitSpec{System: scopes&1 != 0, Display: scopes&2 != 0, Lid: scopes&4 != 0}
+		want := ""
+		if spec.System {
+			want = "-i"
+		}
+		if spec.Display {
+			if want != "" {
+				want += " "
+			}
+			want += "-d"
+		}
+		if got := caffeinateFlags(spec); got != want {
+			t.Errorf("spec=%+v: flags=%q, want %q", spec, got, want)
 		}
 	}
 }
 
 func TestDarwinInhibitorLifecycle(t *testing.T) {
-	inh := newDarwinInhibitor()
+	// Substitute a harmless child, never invoke the host's caffeinate or pmset.
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "caffeinate"), []byte("#!/bin/sh\nexec /bin/sleep 3600\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	inh := &darwinInhibitor{}
+	t.Cleanup(func() { _ = inh.Release() })
 
 	if err := inh.Apply(InhibitSpec{System: true, Display: true}); err != nil {
 		t.Fatalf("apply: %v", err)

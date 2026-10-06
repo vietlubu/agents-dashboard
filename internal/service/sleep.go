@@ -26,22 +26,7 @@ func (s *SleepService) Status() sleep.Status {
 	return s.deps.Sleep.Status()
 }
 
-// ClamshellSupported reports whether the platform can keep the machine running with the
-// lid closed beyond AC power. Only macOS can, through an administrator prompt.
-func (s *SleepService) ClamshellSupported() bool {
-	return s.deps.Sleep != nil && s.deps.Sleep.ClamshellSupported()
-}
-
-// RequestClamshell raises the one administrator prompt needed to keep the machine running
-// with the lid closed. It is only ever called from an explicit user action.
-func (s *SleepService) RequestClamshell() error {
-	if s.deps.Sleep == nil {
-		return nil
-	}
-	return s.deps.Sleep.RequestClamshell()
-}
-
-// RestoreClamshell undoes RequestClamshell, restoring the system's own lid behaviour.
+// RestoreClamshell explicitly clears a legacy machine-wide sleep-disabled flag.
 func (s *SleepService) RestoreClamshell() error {
 	if s.deps.Sleep == nil {
 		return nil

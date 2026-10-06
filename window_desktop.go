@@ -66,6 +66,7 @@ type trayLabels struct {
 	stUnsupported, stDisabled, stActive  string
 	stGrace, stWaitingUser, stSleeping   string
 	stIdle, stAlways, stError, noTargets string
+	lidUnsupported, legacySleepDisabled  string
 }
 
 func trayLabelsFor(locale string) trayLabels {
@@ -76,7 +77,7 @@ func trayLabelsFor(locale string) trayLabels {
 			modeOff:       "Tắt",
 			modeAgent:     "Khi agent hoạt động",
 			modeAlways:    "Luôn chặn sleep",
-			system:        "Chặn sleep hệ thống",
+			system:        "Chặn sleep hệ thống khi không hoạt động",
 			display:       "Chặn sleep màn hình",
 			lid:           "Gi\u1eef m\u00e1y ch\u1ea1y khi g\u1eadp n\u1eafp",
 			restore:       "Khôi phục sleep hệ thống",
@@ -96,16 +97,18 @@ func trayLabelsFor(locale string) trayLabels {
 			confirmSleep:  "Sleep",
 			confirmCancel: "Hu\u1ef7",
 
-			stUnsupported: "Không hỗ trợ",
-			stDisabled:    "Đang tắt",
-			stActive:      "Đang giữ máy thức",
-			stGrace:       "Đang đếm ngược tới lúc ngủ",
-			stWaitingUser: "Chờ người dùng rời máy",
-			stSleeping:    "Đang ngủ",
-			stIdle:        "Rảnh",
-			stAlways:      "Đang chặn sleep liên tục",
-			stError:       "Lỗi điều khiển sleep",
-			noTargets:     "Chưa chọn mục nào cần chặn sleep.",
+			stUnsupported:       "Không hỗ trợ",
+			stDisabled:          "Đang tắt",
+			stActive:            "Đang giữ máy thức",
+			stGrace:             "Đang đếm ngược tới lúc ngủ",
+			stWaitingUser:       "Chờ người dùng rời máy",
+			stSleeping:          "Đang ngủ",
+			stIdle:              "Rảnh",
+			stAlways:            "Đang chặn sleep liên tục",
+			stError:             "Lỗi điều khiển sleep",
+			noTargets:           "Chưa chọn mục nào cần chặn sleep.",
+			lidUnsupported:      "Không hỗ trợ chặn sleep khi gập nắp",
+			legacySleepDisabled: "Sleep toàn hệ thống đang bị tắt; cần khôi phục",
 		}
 	}
 	return trayLabels{
@@ -114,7 +117,7 @@ func trayLabelsFor(locale string) trayLabels {
 		modeOff:       "Off",
 		modeAgent:     "While an agent is active",
 		modeAlways:    "Always prevent sleep",
-		system:        "Prevent system sleep",
+		system:        "Prevent idle system sleep",
 		display:       "Prevent display sleep",
 		lid:           "Keep running with the lid closed",
 		restore:       "Restore system sleep",
@@ -134,16 +137,18 @@ func trayLabelsFor(locale string) trayLabels {
 		confirmSleep:  "Sleep",
 		confirmCancel: "Cancel",
 
-		stUnsupported: "Unsupported",
-		stDisabled:    "Off",
-		stActive:      "Holding the machine awake",
-		stGrace:       "Countdown to sleep",
-		stWaitingUser: "Waiting for the user to step away",
-		stSleeping:    "Sleeping",
-		stIdle:        "Idle",
-		stAlways:      "Preventing sleep continuously",
-		stError:       "Sleep control error",
-		noTargets:     "No sleep prevention targets are selected.",
+		stUnsupported:       "Unsupported",
+		stDisabled:          "Off",
+		stActive:            "Holding the machine awake",
+		stGrace:             "Countdown to sleep",
+		stWaitingUser:       "Waiting for the user to step away",
+		stSleeping:          "Sleeping",
+		stIdle:              "Idle",
+		stAlways:            "Preventing sleep continuously",
+		stError:             "Sleep control error",
+		noTargets:           "No sleep prevention targets are selected.",
+		lidUnsupported:      "Lid-closed sleep prevention unavailable",
+		legacySleepDisabled: "System sleep is disabled; restore it",
 	}
 }
 
@@ -161,22 +166,23 @@ type tray struct {
 	show  *application.MenuItem
 	quit  *application.MenuItem
 
-	modeHeading *application.MenuItem
-	modeOff     *application.MenuItem
-	modeAgent   *application.MenuItem
-	modeAlways  *application.MenuItem
-	sysSleep    *application.MenuItem
-	dispSleep   *application.MenuItem
-	lidSleep    *application.MenuItem
-	restore     *application.MenuItem
-	sleepNow    *application.MenuItem
-	dispNow     *application.MenuItem
-	screensaver *application.MenuItem
-	status      *application.MenuItem
-	total       *application.MenuItem
-	input       *application.MenuItem
-	cache       *application.MenuItem
-	output      *application.MenuItem
+	modeHeading    *application.MenuItem
+	modeOff        *application.MenuItem
+	modeAgent      *application.MenuItem
+	modeAlways     *application.MenuItem
+	sysSleep       *application.MenuItem
+	dispSleep      *application.MenuItem
+	lidSleep       *application.MenuItem
+	lidUnsupported *application.MenuItem
+	restore        *application.MenuItem
+	sleepNow       *application.MenuItem
+	dispNow        *application.MenuItem
+	screensaver    *application.MenuItem
+	status         *application.MenuItem
+	total          *application.MenuItem
+	input          *application.MenuItem
+	cache          *application.MenuItem
+	output         *application.MenuItem
 
 	locale      string
 	labels      trayLabels
@@ -211,8 +217,12 @@ func setupTray(app *application.App, setSvc *service.SettingsService, sleepSvc *
 	t.sysSleep.OnClick(func(*application.Context) { t.toggleSystem() })
 	t.dispSleep = menu.AddCheckbox(l.display, true)
 	t.lidSleep = menu.AddCheckbox(l.lid, false)
+	t.lidSleep.SetHidden(!sleepSvc.Status().LidSupported)
 	t.dispSleep.OnClick(func(*application.Context) { t.toggleDisplay() })
 	t.lidSleep.OnClick(func(*application.Context) { t.toggleLid() })
+	t.lidUnsupported = menu.Add(l.lidUnsupported)
+	t.lidUnsupported.SetEnabled(false)
+	t.lidUnsupported.SetHidden(sleepSvc.Status().LidSupported)
 	t.restore = menu.Add(l.restore)
 	t.restore.OnClick(func(*application.Context) { t.restoreClamshell() })
 
@@ -377,15 +387,6 @@ func (t *tray) save(patch store.SettingsPatch) {
 		t.showSleepError(err)
 		return
 	}
-	requestLid := (patch.PreventLidClosedSleep != nil && *patch.PreventLidClosedSleep) ||
-		patch.SleepMode == config.SleepModeAgent || patch.SleepMode == config.SleepModeAlways
-	effective := t.current()
-	if requestLid && effective != nil && effective.SleepMode != config.SleepModeOff &&
-		effective.PreventLidClosedSleep && t.sleepSvc.ClamshellSupported() && !t.sleepSvc.Status().Clamshell {
-		if err := t.sleepSvc.RequestClamshell(); err != nil {
-			t.showSleepError(err)
-		}
-	}
 }
 
 func (t *tray) showSleepError(err error) {
@@ -425,6 +426,8 @@ func (t *tray) refresh() {
 	t.sysSleep.SetEnabled(scopesEnabled)
 	t.dispSleep.SetEnabled(scopesEnabled)
 	t.lidSleep.SetEnabled(scopesEnabled)
+	t.lidSleep.SetHidden(!st.LidSupported)
+	t.lidUnsupported.SetHidden(st.LidSupported)
 	t.restore.SetEnabled(st.Clamshell)
 	t.status.SetLabel(l.status + t.statusText(st))
 
@@ -464,6 +467,7 @@ func (t *tray) applyLabels(locale string) {
 	t.sysSleep.SetLabel(l.system)
 	t.dispSleep.SetLabel(l.display)
 	t.lidSleep.SetLabel(l.lid)
+	t.lidUnsupported.SetLabel(l.lidUnsupported)
 	t.restore.SetLabel(l.restore)
 	t.sleepNow.SetLabel(l.sleepNow)
 	t.dispNow.SetLabel(l.dispNow)
@@ -477,6 +481,9 @@ func (t *tray) statusText(st sleep.Status) string {
 	l := t.labels
 	if st.Error != "" {
 		return l.stError + ": " + st.Error
+	}
+	if st.Clamshell {
+		return l.legacySleepDisabled
 	}
 	if !st.Supported {
 		return l.stUnsupported

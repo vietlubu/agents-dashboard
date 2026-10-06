@@ -11,9 +11,10 @@ import (
 	"unsafe"
 )
 
-// PlatformSupported reports that Windows can control sleep. Keeping the machine awake with
-// the lid closed has no supported API; that toggle behaves as "do nothing" here.
+// PlatformSupported reports that Windows can control idle system and display sleep.
 func PlatformSupported() bool { return true }
+
+func platformLidSupported() bool { return false }
 
 func defaultInhibitor() Inhibitor           { return newWindowsInhibitor() }
 func defaultSleeper() Sleeper               { return windowsSleeper{} }

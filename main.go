@@ -85,6 +85,7 @@ func main() {
 		Screensaver:    platform.Screensaver,
 		Idler:          platform.Idler,
 		Supported:      platform.Supported,
+		LidSupported:   platform.LidSupported,
 		Log:            logger,
 		OnStatus: func(st sleep.Status) {
 			if app != nil {

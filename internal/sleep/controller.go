@@ -26,6 +26,7 @@ type Deps struct {
 	Screensaver    ScreensaverStarter
 	Idler          Idler
 	Supported      bool
+	LidSupported   bool
 	Log            *slog.Logger
 	OnStatus       func(Status)
 	Tick           time.Duration
@@ -44,6 +45,7 @@ type Controller struct {
 	screensaver    ScreensaverStarter
 	idler          Idler
 	supported      bool
+	lidSupported   bool
 	log            *slog.Logger
 	onStatus       func(Status)
 	tick           time.Duration
@@ -56,10 +58,8 @@ type Controller struct {
 	// A committed non-agent mode must invalidate history even if kicks coalesce.
 	resetHistory bool
 	clamshell    bool
-	// clamshellFailed latches after a failed restore so a declined administrator prompt
-	// is not repeated on every tick.
-	clamshellFailed bool
-	lastErr         string
+	clamshellErr string
+	lastErr      string
 
 	stop     chan struct{}
 	done     chan struct{}
@@ -86,16 +86,18 @@ func New(d Deps) *Controller {
 		screensaver:    d.Screensaver,
 		idler:          d.Idler,
 		supported:      d.Supported,
+		lidSupported:   d.LidSupported,
 		log:            log,
 		onStatus:       d.OnStatus,
 		tick:           tick,
-		status:         Status{Mode: config.SleepModeOff, Supported: d.Supported},
+		status:         Status{Mode: config.SleepModeOff, Supported: d.Supported, LidSupported: d.LidSupported},
 		stop:           make(chan struct{}),
 		done:           make(chan struct{}),
 		kick:           make(chan struct{}, 1),
 	}
 	if cc, ok := d.Inhibitor.(ClamshellController); ok {
 		c.clamshell = cc.ClamshellActive()
+		c.status.Clamshell = c.clamshell
 	}
 	return c
 }
@@ -139,43 +141,22 @@ func (c *Controller) Kick() {
 // Supported reports whether this platform can control sleep at all.
 func (c *Controller) Supported() bool { return c.supported }
 
-// ClamshellSupported reports whether the platform can keep the machine running with the
-// lid closed beyond AC power.
-func (c *Controller) ClamshellSupported() bool {
-	_, ok := c.inhibitor.(ClamshellController)
-	return ok
-}
-
-// RequestClamshell asks the platform to keep the machine running with the lid closed. On
-// macOS this raises one administrator prompt; the caller decides whether to offer it.
-func (c *Controller) RequestClamshell() error {
-	cc, ok := c.inhibitor.(ClamshellController)
-	if !ok {
-		return errUnsupported
-	}
-	if err := cc.RequestClamshell(); err != nil {
-		return err
-	}
-	c.mu.Lock()
-	c.clamshell = true
-	c.clamshellFailed = false
-	c.mu.Unlock()
-	c.Kick()
-	return nil
-}
-
-// RestoreClamshell undoes RequestClamshell, restoring the system's own lid behaviour.
+// RestoreClamshell explicitly clears a legacy machine-wide sleep-disabled flag.
 func (c *Controller) RestoreClamshell() error {
 	cc, ok := c.inhibitor.(ClamshellController)
 	if !ok {
 		return errUnsupported
 	}
 	if err := cc.RestoreClamshell(); err != nil {
+		c.mu.Lock()
+		c.clamshellErr = err.Error()
+		c.mu.Unlock()
+		c.Kick()
 		return err
 	}
 	c.mu.Lock()
 	c.clamshell = false
-	c.clamshellFailed = false
+	c.clamshellErr = ""
 	c.mu.Unlock()
 	c.Kick()
 	return nil
@@ -233,7 +214,15 @@ func (c *Controller) ActiveNow(ctx context.Context) bool {
 func (c *Controller) Status() Status {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.status
+	st := c.status
+	// Recovery is immediately visible to RPC reads; only the reconcile loop emits
+	// live status events, so an older tick cannot arrive after its recovery event.
+	st.Clamshell = c.clamshell
+	st.Error = c.lastErr
+	if c.clamshellErr != "" {
+		st.Error = c.clamshellErr
+	}
+	return st
 }
 
 func (c *Controller) loop(ctx context.Context) {
@@ -261,10 +250,10 @@ func (c *Controller) tickOnce(ctx context.Context) {
 	if !config.ValidSleepMode(mode) {
 		mode = config.SleepModeOff
 	}
-	c.syncClamshell(mode != config.SleepModeOff && snap.PreventLidClosedSleep)
 	st := Status{
-		Mode:      mode,
-		Supported: c.supported,
+		Mode:         mode,
+		Supported:    c.supported,
+		LidSupported: c.lidSupported,
 	}
 
 	if !c.supported {
@@ -288,7 +277,7 @@ func (c *Controller) tickOnce(ctx context.Context) {
 	spec := InhibitSpec{
 		System:  snap.PreventSystemSleep,
 		Display: snap.PreventDisplaySleep,
-		Lid:     snap.PreventLidClosedSleep,
+		Lid:     snap.PreventLidClosedSleep && c.lidSupported,
 	}
 	if mode == config.SleepModeAlways {
 		c.mu.Lock()
@@ -385,21 +374,6 @@ func (c *Controller) tickOnce(ctx context.Context) {
 	}
 }
 
-// syncClamshell clears the machine-wide clamshell flag once the setting that asked for it is
-// off. Without this the flag outlives the setting and blocks every sleep, including the
-// user's own.
-func (c *Controller) syncClamshell(enabled bool) {
-	if !c.clamshellActive() || enabled || c.clamshellFailed {
-		return
-	}
-	if err := c.RestoreClamshell(); err != nil {
-		c.log.Warn("restore clamshell", "error", err)
-		c.mu.Lock()
-		c.clamshellFailed = true
-		c.mu.Unlock()
-	}
-}
-
 func (c *Controller) clamshellActive() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -444,6 +418,9 @@ func (c *Controller) publish(st Status) {
 	st.KeepingAwake = !c.held.Empty()
 	st.Clamshell = c.clamshell
 	st.Error = c.lastErr
+	if c.clamshellErr != "" {
+		st.Error = c.clamshellErr
+	}
 	changed := c.status != st
 	c.status = st
 	onStatus := c.onStatus

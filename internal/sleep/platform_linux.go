@@ -16,6 +16,8 @@ import (
 // sleep is not covered; see the package documentation.
 func PlatformSupported() bool { return true }
 
+func platformLidSupported() bool { return true }
+
 func defaultInhibitor() Inhibitor           { return &linuxInhibitor{} }
 func defaultSleeper() Sleeper               { return linuxSleeper{} }
 func defaultDisplaySleeper() DisplaySleeper { return linuxDisplaySleeper{} }

@@ -3,6 +3,7 @@ package sleep
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ type fakeInhibitor struct {
 	restores   int
 	applyErr   error
 	releaseErr error
+	restoreErr error
 }
 
 func (f *fakeInhibitor) Apply(s InhibitSpec) error {
@@ -28,9 +30,14 @@ func (f *fakeInhibitor) Release() error {
 	return f.releaseErr
 }
 
-func (f *fakeInhibitor) RequestClamshell() error { f.clamshell = true; return nil }
-
-func (f *fakeInhibitor) RestoreClamshell() error { f.clamshell = false; f.restores++; return nil }
+func (f *fakeInhibitor) RestoreClamshell() error {
+	f.restores++
+	if f.restoreErr != nil {
+		return f.restoreErr
+	}
+	f.clamshell = false
+	return nil
+}
 
 func (f *fakeInhibitor) ClamshellActive() bool { return f.clamshell }
 
@@ -342,39 +349,119 @@ func TestOneShotActions(t *testing.T) {
 	}
 }
 
-func TestClearsClamshellWhenLidSettingOff(t *testing.T) {
-	for _, mode := range []string{config.SleepModeAgent, config.SleepModeAlways} {
-		t.Run(mode, func(t *testing.T) {
-			cfg := newTestConfig(time.Hour, time.Minute)
-			cfg.Apply(config.Mutable{SleepMode: mode, PreventLidClosedSleep: true})
-			inh := &fakeInhibitor{clamshell: true} // armed by an earlier session
-			c := newTestController(cfg, &fakeActivity{}, inh, &fakeSleeper{}, fakeIdler{})
-
+func TestPolicyChangesPreserveLegacyClamshell(t *testing.T) {
+	cfg := newTestConfig(time.Hour, time.Minute)
+	inh := &fakeInhibitor{clamshell: true}
+	c := newTestController(cfg, &fakeActivity{act: Activity{Active: true}}, inh, &fakeSleeper{}, fakeIdler{})
+	if !c.Status().Clamshell {
+		t.Fatal("initial status hid the legacy flag")
+	}
+	for _, mode := range []string{config.SleepModeAgent, config.SleepModeAlways, config.SleepModeOff} {
+		for scopes := range 8 {
+			cfg.Apply(config.Mutable{SleepMode: mode, PreventSystemSleep: scopes&1 != 0,
+				PreventDisplaySleep: scopes&2 != 0, PreventLidClosedSleep: scopes&4 != 0})
+			c.Kick()
 			c.tickOnce(context.Background())
-			if inh.restores != 0 || !c.Status().Clamshell {
-				t.Fatalf("restores = %d, clamshell = %v, want the flag left alone", inh.restores, c.Status().Clamshell)
+			if inh.restores != 0 || !inh.clamshell || !c.Status().Clamshell {
+				t.Fatalf("policy %s/%d changed legacy policy: %+v", mode, scopes, c.Status())
 			}
-			// The user turns the lid setting off: the machine-wide flag must not outlive it.
-			cfg.Apply(config.Mutable{SleepMode: mode, PreventLidClosedSleep: false})
-			c.tickOnce(context.Background())
-
-			if inh.restores != 1 || inh.clamshell || c.Status().Clamshell {
-				t.Fatalf("restores = %d, clamshell = %v, want the flag cleared", inh.restores, inh.clamshell)
-			}
-		})
+		}
+	}
+	// Complete the unused loop deterministically; Stop must only release assertions.
+	close(c.done)
+	c.Stop()
+	if inh.restores != 0 || !inh.clamshell || !c.Status().Clamshell {
+		t.Fatal("Stop restored legacy policy")
 	}
 }
 
-func TestClearsClamshellWhenFeatureDisabled(t *testing.T) {
+func TestExplicitLegacyRestore(t *testing.T) {
+	for _, sleepNow := range []bool{false, true} {
+		inh := &fakeInhibitor{clamshell: true, restoreErr: errors.New("restore declined")}
+		slp := &fakeSleeper{}
+		c := newTestController(newTestConfig(time.Hour, time.Minute), &fakeActivity{}, inh, slp, fakeIdler{})
+		action := c.RestoreClamshell
+		if sleepNow {
+			action = c.SleepNow
+		}
+		if err := action(); !errors.Is(err, inh.restoreErr) {
+			t.Fatalf("restore error = %v", err)
+		}
+		c.tickOnce(context.Background())
+		if st := c.Status(); !st.Clamshell || st.Error != "restore declined" || slp.sleeps != 0 || inh.restores != 1 {
+			t.Fatalf("failed recovery: %+v, sleeps=%d, restores=%d", st, slp.sleeps, inh.restores)
+		}
+		inh.restoreErr = nil
+		if err := action(); err != nil {
+			t.Fatal(err)
+		}
+		if st := c.Status(); st.Clamshell || st.Error != "" || inh.restores != 2 || (sleepNow && slp.sleeps != 1) {
+			t.Fatalf("successful recovery: %+v, sleeps=%d", st, slp.sleeps)
+		}
+	}
+}
+
+func TestLegacyRecoveryEventsFollowReconcileOrder(t *testing.T) {
 	cfg := newTestConfig(time.Hour, time.Minute)
-	cfg.Apply(config.Mutable{SleepMode: config.SleepModeOff, PreventLidClosedSleep: true})
-	inh := &fakeInhibitor{clamshell: true}
-	c := newTestController(cfg, &fakeActivity{}, inh, &fakeSleeper{}, fakeIdler{})
-
+	cfg.Apply(config.Mutable{SleepMode: config.SleepModeAlways, PreventSystemSleep: true})
+	started, resume := make(chan struct{}), make(chan struct{})
+	var eventMu sync.Mutex
+	var events []Status
+	c := New(Deps{
+		Cfg: cfg, Inhibitor: &fakeInhibitor{clamshell: true}, Supported: true,
+		OnStatus: func(st Status) {
+			if st.Clamshell {
+				close(started)
+				<-resume
+			}
+			eventMu.Lock()
+			events = append(events, st)
+			eventMu.Unlock()
+		},
+	})
+	done := make(chan struct{})
+	go func() { c.tickOnce(context.Background()); close(done) }()
+	<-started // The reconcile event is captured, but has not been delivered yet.
+	err := c.RestoreClamshell()
+	close(resume)
+	<-done
+	if err != nil {
+		t.Fatal(err)
+	}
 	c.tickOnce(context.Background())
+	eventMu.Lock()
+	defer eventMu.Unlock()
+	if len(events) != 2 || events[0].Clamshell != true || events[1].Clamshell != false {
+		t.Fatalf("recovery left a stale legacy warning in the event stream: %+v", events)
+	}
+}
 
-	if inh.restores != 1 || inh.clamshell {
-		t.Fatalf("restores = %d, clamshell = %v, want the flag cleared", inh.restores, inh.clamshell)
+func TestLidCapabilityFiltersSavedScope(t *testing.T) {
+	for _, supported := range []bool{false, true} {
+		for _, mode := range []string{config.SleepModeAgent, config.SleepModeAlways} {
+			cfg := newTestConfig(time.Hour, time.Minute)
+			cfg.Apply(config.Mutable{SleepMode: mode, PreventLidClosedSleep: true})
+			inh := &fakeInhibitor{}
+			c := New(Deps{Cfg: cfg, Activity: &fakeActivity{act: Activity{Active: true}}, Inhibitor: inh,
+				Supported: true, LidSupported: supported})
+			if c.Status().LidSupported != supported {
+				t.Fatal("initial capability incorrect")
+			}
+			c.tickOnce(context.Background())
+			st := c.Status()
+			if st.LidSupported != supported || st.KeepingAwake != supported || st.Held != (HeldSpec{Lid: supported}) {
+				t.Fatalf("mode=%s capability=%v: %+v", mode, supported, st)
+			}
+			if supported && (len(inh.applied) != 1 || inh.applied[0] != (InhibitSpec{Lid: true})) {
+				t.Fatalf("supported lid lost: %+v", inh.applied)
+			}
+			if !supported && len(inh.applied) != 0 {
+				t.Fatalf("unsupported lid applied: %+v", inh.applied)
+			}
+			if !cfg.Snapshot().PreventLidClosedSleep {
+				t.Fatal("saved lid preference was discarded")
+			}
+		}
 	}
 }
 
@@ -440,7 +527,7 @@ func TestStopReleasesAndStopsLoop(t *testing.T) {
 			cfg := newTestConfig(time.Hour, time.Minute)
 			cfg.Apply(config.Mutable{SleepMode: mode, PreventSystemSleep: true})
 			act := &fakeActivity{act: Activity{Active: true}}
-			inh := &fakeInhibitor{}
+			inh := &fakeInhibitor{clamshell: true}
 			c := newTestController(cfg, act, inh, &fakeSleeper{}, fakeIdler{})
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -461,6 +548,9 @@ func TestStopReleasesAndStopsLoop(t *testing.T) {
 			}
 			if inh.released == 0 {
 				t.Errorf("inhibitor was never released on Stop")
+			}
+			if inh.restores != 0 || !inh.clamshell || !c.Status().Clamshell {
+				t.Error("Stop changed legacy system sleep policy")
 			}
 		})
 	}

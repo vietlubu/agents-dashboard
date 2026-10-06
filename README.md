@@ -165,7 +165,7 @@ database and overlays them without a restart.
 | `AGENTS_DASHBOARD_SLEEP_ACTIVE_WINDOW` | `2m` | How recently a session must have written to count as active |
 | `AGENTS_DASHBOARD_PREVENT_SYSTEM_SLEEP` | `true` | Prevent idle system sleep under the selected policy |
 | `AGENTS_DASHBOARD_PREVENT_DISPLAY_SLEEP` | `true` | Prevent display sleep under the selected policy |
-| `AGENTS_DASHBOARD_PREVENT_LID_SLEEP` | `false` | Keep running with the lid closed (see below) |
+| `AGENTS_DASHBOARD_PREVENT_LID_SLEEP` | `false` | Keep running with the lid closed where supported (Linux only) |
 
 The database lives at `<AGENTS_DASHBOARD_HOME>/dashboard.db`, the log at
 `<AGENTS_DASHBOARD_HOME>/agents-dashboard.log`. Delete both to start over — the next scan
@@ -174,7 +174,7 @@ rebuilds everything from the agent files.
 ### Sleep prevention and the menu bar
 
 **Settings → Sleep prevention** and the menu bar share one policy choice and the same
-system/display/lid scopes. Saved changes update both surfaces immediately:
+supported scopes. Saved changes update both surfaces immediately:
 
 - **Off** leaves ordinary sleep to the operating system, retaining the selected scopes.
 - **While an agent is active** holds the selected assertions while an agent process is running
@@ -183,7 +183,8 @@ system/display/lid scopes. Saved changes update both surfaces immediately:
   run, it does not start a countdown.
 - **Always prevent sleep** continuously holds the selected assertions while the app is running,
   even without an agent. It never starts a countdown or automatically suspends the machine.
-  The system scope must be selected to prevent idle system sleep; selecting no scopes holds
+  On macOS this prevents **idle** sleep, not an explicit **Apple → Sleep** request. The system
+  scope must be selected to prevent idle system sleep; selecting no supported scopes holds
   nothing and the status says so.
 
 The two durations apply only to agent mode and are retained when switching modes. Existing
@@ -193,7 +194,7 @@ variable is no longer read.
 
 | | Keep-awake | Display | Lid closed | Sleep now | Display now | Screensaver |
 |---|---|---|---|---|---|---|
-| macOS | `caffeinate -i` | `caffeinate -d` | `caffeinate -s` on AC, or administrator-authorized `pmset disablesleep` | `pmset sleepnow` | `pmset displaysleepnow` | `ScreenSaverEngine` |
+| macOS | `caffeinate -i` (idle sleep only) | `caffeinate -d` | not supported; normal macOS lid behavior applies | `pmset sleepnow` | `pmset displaysleepnow` | `ScreenSaverEngine` |
 | Windows | `SetThreadExecutionState` | `+ ES_DISPLAY_REQUIRED` | no supported API | `SetSuspendState` | `SC_MONITORPOWER` broadcast | `SC_SCREENSAVE` broadcast |
 | Linux | `systemd-inhibit --what=idle:sleep` | best-effort (may be unavailable on Wayland) | `handle-lid-switch` | `systemctl suspend` | `xset dpms force off` | `xdg-screensaver activate` |
 
@@ -204,19 +205,21 @@ suspending, and **Start screensaver** switches the session to the screensaver. I
 **Session usage (today)** section and the menu-bar count report every token — input, cache
 reads, cache writes and output — not just input plus output.
 
-The lid-closed scope has a separate, machine-wide side effect on macOS: keeping a laptop
-running on battery with its lid closed needs the kernel `SleepDisabled` flag. Only an explicit
-eligible save requests administrator authorization; startup and refresh never request enabling
-it. Authorization may succeed without displaying a password prompt, so a cancel-only smoke
-check must simulate failure at the API boundary rather than assume a prompt will appear.
+On macOS the app only holds `caffeinate -i`/`-d` assertions. Changing modes or scopes needs no
+administrator password and does not disable **Apple → Sleep**. Lid-closed prevention is
+unsupported on macOS and Windows, so those controls are hidden; a previously saved lid choice
+is retained but ignored there. Linux keeps its existing lid-switch inhibitor.
 
-That flag blocks *every* sleep, including **Sleep** from the Apple menu, and can outlive the
-app. The app attempts to clear it when lid prevention or the policy is turned off, and before
-**Sleep now**. **Restore system sleep**, available in both Settings and the menu bar, also
-clears it; errors remain visible if restoration fails. Declining authorization keeps
-the saved lid choice and falls back to `caffeinate -s`, which only works on AC power. Ordinary
-assertions are released on Quit. The headless server has no native menu bar; sleep control
-still follows the host platform's capabilities and the saved policy.
+**Upgrading from a version that used `pmset disablesleep`:** the machine-wide `SleepDisabled`
+flag can remain enabled after that version exits. The app detects it and shows a warning:
+Apple-menu Sleep remains blocked until the flag is cleared. Use **Restore system sleep** in
+Settings or the menu bar for explicit recovery; that one action may require administrator
+authorization. The app never enables this flag again and does not silently change the machine's
+power policy on startup, mode changes, or Quit. The app's explicit **Sleep now** action also
+restores a detected legacy flag before sleeping and reports failure if recovery is refused.
+
+Ordinary assertions are released on Quit. The headless server has no native menu bar; sleep
+control still follows the host platform's capabilities and the saved policy.
 
 On macOS the window's close button **hides the app into the menu bar**: the window is hidden
 rather than destroyed, the Dock tile and application menu disappear (the app switches to the
