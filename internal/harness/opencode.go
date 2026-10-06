@@ -22,7 +22,12 @@ type ocMessage struct {
 	ProviderID string   `json:"providerID"`
 	Cost       *float64 `json:"cost"`
 	Agent      string   `json:"agent"`
-	Tokens     struct {
+	// The v2 schema nests the model rather than carrying modelID/providerID flat.
+	Model struct {
+		ID         string `json:"id"`
+		ProviderID string `json:"providerID"`
+	} `json:"model"`
+	Tokens struct {
 		Input     int64 `json:"input"`
 		Output    int64 `json:"output"`
 		Reasoning int64 `json:"reasoning"`
@@ -40,6 +45,12 @@ type ocMessage struct {
 type opencodeAdapter struct {
 	home string
 }
+
+// modelID is the model a message ran on: v1 stores it flat, v2 nested under "model".
+func (m ocMessage) modelID() string { return NonEmpty(m.ModelID, m.Model.ID) }
+
+// providerID is the provider a message ran on, resolved the same way as the model id.
+func (m ocMessage) providerID() string { return NonEmpty(m.ProviderID, m.Model.ProviderID) }
 
 func newOpencodeAdapter(home string) *opencodeAdapter {
 	return &opencodeAdapter{home: home}
@@ -80,29 +91,110 @@ func (a *opencodeAdapter) resolveDB(roots []string) string {
 }
 
 func (a *opencodeAdapter) Scan(ctx context.Context, in ScanInput) error {
-	if db := a.resolveDB(in.Roots); db != "" {
-		return a.scanDatabase(ctx, in, db)
+	dbPath := a.resolveDB(in.Roots)
+	if dbPath == "" {
+		return a.scanLegacyStorage(ctx, in)
 	}
-	return a.scanLegacyStorage(ctx, in)
-}
-
-// scanDatabase reads the assistant messages one row at a time and resumes from a rowid
-// watermark. The rowid is seekable (the primary key is a text id, so rowid is a separate
-// ascending key), which means an incremental pass reads only the new rows instead of
-// rescanning the whole table.
-func (a *opencodeAdapter) scanDatabase(ctx context.Context, in ScanInput, dbPath string) error {
 	db, err := OpenReadOnly(XDBSpec{Path: dbPath})
 	if err != nil {
 		return nil // a locked or unreadable database is retried on the next sync
 	}
 	defer db.Close()
 
+	snk := newSink(a.ID(), in.Emit, in.EmitProgress)
+	// A database migrating to the v2 schema carries both stores at once, so both are read.
+	// They share the event key ("opencode|<message id>"), which collapses the rows that
+	// appear in each: the v2 store is a superset of the v1 rows it was migrated from, and
+	// the store keeps the larger of two totals for a duplicate key.
+	for _, store := range ocStores {
+		if !TableExists(db, store.messages) || !TableExists(db, store.sessions) {
+			continue
+		}
+		if err := a.scanStore(ctx, in, db, dbPath, store, snk); err != nil {
+			return err
+		}
+	}
+	return snk.finish()
+}
+
+// ocStore locates one of the two message stores an OpenCode database can carry. The v1
+// schema kept messages in `message` joined to `session`; the v2 schema keeps them in
+// `session_message` joined to `session_v2`, with the role in a column of its own and the
+// model nested inside the payload.
+type ocStore struct {
+	// suffix distinguishes the scan_state cursor of one store from the other's in the same
+	// database.
+	suffix string
+	// messages and sessions are the tables holding messages and session metadata.
+	messages string
+	sessions string
+	// roleExpr, modelExpr and providerExpr project the fields the caller needs out of a
+	// store whose payload layout differs.
+	roleExpr     string
+	modelExpr    string
+	providerExpr string
+	// fallbackRoleExpr yields the role when the payload has to be decoded in Go because
+	// the database lacks JSON1. The v1 payload carries its own role, so it selects a
+	// literal; v2 keeps the role only in the column.
+	fallbackRoleExpr string
+}
+
+// ocStores is tried in order: v1 first because a v1-only database is the common case, and
+// both are read when both exist.
+var ocStores = []ocStore{
+	{
+		messages:         "message",
+		sessions:         "session",
+		roleExpr:         `json_extract(m.data,'$.role')`,
+		modelExpr:        `json_extract(m.data,'$.modelID')`,
+		providerExpr:     `json_extract(m.data,'$.providerID')`,
+		fallbackRoleExpr: `''`,
+	},
+	{
+		suffix:           "#v2",
+		messages:         "session_message",
+		sessions:         "session_v2",
+		roleExpr:         `m.type`,
+		modelExpr:        `json_extract(m.data,'$.model.id')`,
+		providerExpr:     `json_extract(m.data,'$.model.providerID')`,
+		fallbackRoleExpr: `m.type`,
+	},
+}
+
+// query projects one store's accounting fields. The message payload holds the whole
+// assistant response, which is hundreds of kilobytes on some rows, so extracting only the
+// fields needed avoids reading that text into the process at all; without JSON1 available
+// the query falls back to returning the payload for decoding in Go.
+func (s ocStore) query(useJSON bool) string {
+	projection := `
+			m.rowid, m.id, m.session_id, m.time_created, ` + s.roleExpr + `,
+			` + s.modelExpr + `, ` + s.providerExpr + `, json_extract(m.data,'$.cost'),
+			json_extract(m.data,'$.agent'),
+			json_extract(m.data,'$.tokens.input'), json_extract(m.data,'$.tokens.output'),
+			json_extract(m.data,'$.tokens.reasoning'),
+			json_extract(m.data,'$.tokens.cache.read'), json_extract(m.data,'$.tokens.cache.write'),
+			json_extract(m.data,'$.time.created'), json_extract(m.data,'$.time.completed'),
+			COALESCE(s.directory,''), COALESCE(s.parent_id,''), COALESCE(s.agent,'')`
+	if !useJSON {
+		projection = `
+			m.rowid, m.id, m.session_id, m.time_created, m.data, ` + s.fallbackRoleExpr + `,
+			COALESCE(s.directory,''), COALESCE(s.parent_id,''), COALESCE(s.agent,'')`
+	}
+	return `SELECT` + projection + `
+		FROM ` + s.messages + ` m LEFT JOIN ` + s.sessions + ` s ON s.id = m.session_id
+		WHERE m.rowid > ? ORDER BY m.rowid`
+}
+
+// scanStore reads one store's assistant messages a row at a time and resumes from a rowid
+// watermark. The rowid is seekable (the primary key is a text id, so rowid is a separate
+// ascending key), which means an incremental pass reads only the new rows instead of
+// rescanning the whole table.
+func (a *opencodeAdapter) scanStore(ctx context.Context, in ScanInput, db *sql.DB, dbPath string, store ocStore, snk *sink) error {
 	// Counted as one walked unit so the progress numbers stay comparable with the
 	// file-based harnesses.
-	snk := newSink(a.ID(), in.Emit, in.EmitProgress)
 	snk.noteWalked()
 
-	key := sqlKey(a.ID(), dbPath)
+	key := sqlKey(a.ID()+store.suffix, dbPath)
 	st := in.States[key]
 	watermark := st.Watermark
 	if in.Full {
@@ -117,34 +209,8 @@ func (a *opencodeAdapter) scanDatabase(ctx context.Context, in ScanInput, dbPath
 		watermark = 0
 	}
 
-	// The message payload holds the whole assistant response, which is hundreds of
-	// kilobytes on some rows. Extracting only the accounting fields in SQL avoids reading
-	// that text into the process at all; without JSON1 available, fall back to reading the
-	// payload and decoding it.
 	useJSON := supportsJSON(db)
-	var query string
-	if useJSON {
-		query = `
-		SELECT m.rowid, m.id, m.session_id, m.time_created,
-		       json_extract(m.data,'$.role'), json_extract(m.data,'$.modelID'),
-		       json_extract(m.data,'$.providerID'), json_extract(m.data,'$.cost'),
-		       json_extract(m.data,'$.agent'),
-		       json_extract(m.data,'$.tokens.input'), json_extract(m.data,'$.tokens.output'),
-		       json_extract(m.data,'$.tokens.reasoning'),
-		       json_extract(m.data,'$.tokens.cache.read'), json_extract(m.data,'$.tokens.cache.write'),
-		       json_extract(m.data,'$.time.created'), json_extract(m.data,'$.time.completed'),
-		       COALESCE(s.directory,''), COALESCE(s.parent_id,''), COALESCE(s.agent,'')
-		FROM message m LEFT JOIN session s ON s.id = m.session_id
-		WHERE m.rowid > ? ORDER BY m.rowid`
-	} else {
-		query = `
-		SELECT m.rowid, m.id, m.session_id, m.time_created, m.data,
-		       COALESCE(s.directory,''), COALESCE(s.parent_id,''), COALESCE(s.agent,'')
-		FROM message m LEFT JOIN session s ON s.id = m.session_id
-		WHERE m.rowid > ? ORDER BY m.rowid`
-	}
-
-	rows, err := db.QueryContext(ctx, query, watermark)
+	rows, err := db.QueryContext(ctx, store.query(useJSON), watermark)
 	if err != nil {
 		if IsBusy(err) {
 			return nil // keep the previous watermark and retry next sync
@@ -190,14 +256,16 @@ func (a *opencodeAdapter) scanDatabase(ctx context.Context, in ScanInput, dbPath
 				m.Cost = &v
 			}
 		} else {
-			var data string
-			if err := rows.Scan(&rowID, &msgID, &sessionID, &timeCreated, &data,
+			var data, roleCol string
+			if err := rows.Scan(&rowID, &msgID, &sessionID, &timeCreated, &data, &roleCol,
 				&directory, &parentID, &agent); err != nil {
 				return err
 			}
 			if err := json.Unmarshal([]byte(data), &m); err != nil {
 				continue
 			}
+			// v2 keeps the role only in the column; v1 keeps it in the payload.
+			m.Role = NonEmpty(m.Role, roleCol)
 		}
 		scanned++
 		if rowID > maxRowID {
@@ -240,8 +308,8 @@ func (a *opencodeAdapter) scanDatabase(ctx context.Context, in ScanInput, dbPath
 			SourceFile: dbPath,
 			SessionID:  sessionID,
 			Project:    directory,
-			Model:      NonEmpty(m.ModelID, "unknown"),
-			Provider:   m.ProviderID,
+			Model:      NonEmpty(m.modelID(), "unknown"),
+			Provider:   m.providerID(),
 			AgentType:  agentType,
 			AgentName:  agentName,
 			Outcome:    "unknown",
@@ -272,7 +340,7 @@ func (a *opencodeAdapter) scanDatabase(ctx context.Context, in ScanInput, dbPath
 
 	// Session metadata is cosmetic: a failure there must not cost us the events and the
 	// watermark below, which are the durable output of this pass.
-	_ = a.emitSessions(ctx, db, snk, dbPath, sessionIDs)
+	_ = a.emitSessions(ctx, db, snk, dbPath, store.sessions, sessionIDs)
 
 	// A pass that found no new rows must not regress the watermark to 0, or the next
 	// pass would re-read the whole table.
@@ -290,11 +358,11 @@ func (a *opencodeAdapter) scanDatabase(ctx context.Context, in ScanInput, dbPath
 		Inode:     inode,
 		Watermark: maxRowID,
 	})
-	return snk.finish()
+	return nil
 }
 
 // emitSessions records the metadata of the sessions touched in this pass.
-func (a *opencodeAdapter) emitSessions(ctx context.Context, db *sql.DB, snk *sink, dbPath string, ids map[string]struct{}) error {
+func (a *opencodeAdapter) emitSessions(ctx context.Context, db *sql.DB, snk *sink, dbPath, sessionsTable string, ids map[string]struct{}) error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -317,7 +385,7 @@ func (a *opencodeAdapter) emitSessions(ctx context.Context, db *sql.DB, snk *sin
 		}
 		q := `SELECT id, COALESCE(directory,''), COALESCE(parent_id,''), COALESCE(agent,''),
 		             COALESCE(model,''), time_created, time_updated
-		      FROM session WHERE id IN (` + placeholders(len(part)) + `)`
+		      FROM ` + sessionsTable + ` WHERE id IN (` + placeholders(len(part)) + `)`
 		rows, err := db.QueryContext(ctx, q, args...)
 		if err != nil {
 			return err
@@ -465,8 +533,8 @@ func (a *opencodeAdapter) scanLegacyStorage(ctx context.Context, in ScanInput) e
 			EventKey:   "opencode|" + legacy.ID,
 			SourceFile: f.Path,
 			SessionID:  sessionID,
-			Model:      NonEmpty(m.ModelID, "unknown"),
-			Provider:   m.ProviderID,
+			Model:      NonEmpty(m.modelID(), "unknown"),
+			Provider:   m.providerID(),
 			AgentType:  "main",
 			AgentName:  NonEmpty(m.Agent, ""),
 			Outcome:    "unknown",

@@ -68,6 +68,9 @@ type ocMessageRow struct {
 	timeCreated int64
 	timeUpdated int64
 	data        string
+	// role is the v2 `session_message.type` column; the v1 schema keeps the role inside
+	// data instead, so it stays empty for v1 rows.
+	role string
 }
 
 func ocData(role, modelID, providerID string, in, out, reasoning, cacheRead, cacheWrite int, cost *float64, created, completed int64) string {
@@ -84,6 +87,92 @@ type ocEnv struct {
 	home string
 	root string
 	db   string
+}
+
+// opencodeV2Fixture builds a v2-schema opencode.db. With alsoV1 it adds the v1 tables and
+// the same messages to them, which is what a database mid-migration looks like.
+func opencodeV2Fixture(t *testing.T, sessions []ocSessionRow, messages []ocMessageRow, alsoV1 bool) ocEnv {
+	t.Helper()
+	var env ocEnv
+	env.home = t.TempDir()
+	env.root = filepath.Join(env.home, "share")
+	if err := os.MkdirAll(env.root, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	env.db = filepath.Join(env.root, "opencode.db")
+
+	db, err := sql.Open("sqlite", "file:"+env.db)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE session_v2 (
+		id TEXT PRIMARY KEY, project_id TEXT NOT NULL DEFAULT '', parent_id TEXT,
+		directory TEXT NOT NULL DEFAULT '', agent TEXT, model TEXT,
+		time_created INTEGER NOT NULL DEFAULT 0, time_updated INTEGER NOT NULL DEFAULT 0)`); err != nil {
+		t.Fatalf("create session_v2: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE session_message (
+		id TEXT PRIMARY KEY, session_id TEXT NOT NULL, type TEXT NOT NULL, seq INTEGER NOT NULL DEFAULT 0,
+		time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL, data TEXT NOT NULL)`); err != nil {
+		t.Fatalf("create session_message: %v", err)
+	}
+	if alsoV1 {
+		if _, err := db.Exec(`CREATE TABLE session (
+			id TEXT PRIMARY KEY, project_id TEXT NOT NULL DEFAULT '', parent_id TEXT,
+			directory TEXT NOT NULL DEFAULT '', agent TEXT, model TEXT,
+			time_created INTEGER NOT NULL DEFAULT 0, time_updated INTEGER NOT NULL DEFAULT 0)`); err != nil {
+			t.Fatalf("create session: %v", err)
+		}
+		if _, err := db.Exec(`CREATE TABLE message (
+			id TEXT PRIMARY KEY, session_id TEXT NOT NULL,
+			time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL, data TEXT NOT NULL)`); err != nil {
+			t.Fatalf("create message: %v", err)
+		}
+	}
+	for _, s := range sessions {
+		if _, err := db.Exec(
+			`INSERT INTO session_v2 (id, parent_id, directory, agent, model, time_created, time_updated)
+			 VALUES (?,?,?,?,?,?,?)`,
+			s.id, s.parentID, s.directory, s.agent, s.model, s.created, s.updated); err != nil {
+			t.Fatalf("insert session_v2: %v", err)
+		}
+		if alsoV1 {
+			if _, err := db.Exec(
+				`INSERT INTO session (id, parent_id, directory, agent, model, time_created, time_updated)
+				 VALUES (?,?,?,?,?,?,?)`,
+				s.id, s.parentID, s.directory, s.agent, s.model, s.created, s.updated); err != nil {
+				t.Fatalf("insert session: %v", err)
+			}
+		}
+	}
+	for _, m := range messages {
+		if _, err := db.Exec(
+			`INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+			 VALUES (?,?,?,?,?,?,?)`,
+			m.id, m.sessionID, m.role, 1, m.timeCreated, m.timeUpdated, m.data); err != nil {
+			t.Fatalf("insert session_message: %v", err)
+		}
+		if alsoV1 {
+			if _, err := db.Exec(
+				`INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (?,?,?,?,?)`,
+				m.id, m.sessionID, m.timeCreated, m.timeUpdated, m.data); err != nil {
+				t.Fatalf("insert message: %v", err)
+			}
+		}
+	}
+	return env
+}
+
+// ocDataV2 is the v2 payload shape: no role (it lives in the column) and the model nested.
+func ocDataV2(modelID, providerID string, in, out, reasoning, cacheRead, cacheWrite int, cost *float64, created, completed int64) string {
+	costJSON := "null"
+	if cost != nil {
+		costJSON = fmt.Sprintf("%v", *cost)
+	}
+	return fmt.Sprintf(
+		`{"model":{"id":%q,"providerID":%q,"variant":"high"},"cost":%s,"agent":"build","tokens":{"input":%d,"output":%d,"reasoning":%d,"cache":{"read":%d,"write":%d}},"time":{"created":%d,"completed":%d}}`,
+		modelID, providerID, costJSON, in, out, reasoning, cacheRead, cacheWrite, created, completed)
 }
 
 func (e ocEnv) adapter() *opencodeAdapter { return &opencodeAdapter{home: e.home} }
@@ -238,6 +327,104 @@ func TestOpenCodeLegacyStorageFallback(t *testing.T) {
 	}
 	if len(states) != 1 {
 		t.Errorf("states = %+v, want one file cursor", states)
+	}
+}
+
+// The v2 schema keeps messages in session_message joined to session_v2, with the role in
+// a column and the model nested: all three have to be resolved like the v1 flat layout.
+func TestOpenCodeV2StoreRowsRead(t *testing.T) {
+	ts := int64(1_791_296_880_305)
+	env := opencodeV2Fixture(t,
+		[]ocSessionRow{
+			{id: "ses_main", directory: "/proj/v2", agent: "build", model: `{"id":"fledge-alpha-free","providerID":"opencode","variant":"high"}`, created: ts, updated: ts},
+			{id: "ses_sub", parentID: "ses_main", directory: "/proj/v2", agent: "librarian", created: ts, updated: ts},
+		},
+		[]ocMessageRow{
+			{id: "msg_v2", sessionID: "ses_main", role: "assistant", timeCreated: ts, timeUpdated: ts, data: ocDataV2("fledge-alpha-free", "opencode", 29097, 109, 0, 0, 0, new(0.0), ts, ts+3000)},
+			{id: "msg_v2_user", sessionID: "ses_main", role: "user", timeCreated: ts, timeUpdated: ts, data: ocDataV2("fledge-alpha-free", "opencode", 500, 0, 0, 0, 0, nil, ts, 0)},
+			{id: "msg_v2_synthetic", sessionID: "ses_main", role: "synthetic", timeCreated: ts, timeUpdated: ts, data: ocDataV2("fledge-alpha-free", "opencode", 40, 0, 0, 0, 0, nil, ts, 0)},
+			{id: "msg_v2_zero", sessionID: "ses_main", role: "assistant", timeCreated: ts, timeUpdated: ts, data: ocDataV2("m", "p", 0, 0, 0, 0, 0, nil, ts, 0)},
+			{id: "msg_v2_sub", sessionID: "ses_sub", role: "assistant", timeCreated: ts, timeUpdated: ts, data: ocDataV2("fledge-alpha-free", "opencode", 116, 58, 0, 25984, 0, nil, ts, ts+1000)},
+		}, false)
+
+	events, sessions, _, states := scanFixture(t, env.adapter(), env.root, true, nil)
+	byKey := map[string]Event{}
+	for _, e := range events {
+		byKey[e.EventKey] = e
+	}
+	if len(events) != 2 {
+		t.Fatalf("events = %+v, want only the two assistant rows carrying tokens", events)
+	}
+	e, ok := byKey["opencode|msg_v2"]
+	if !ok {
+		t.Fatalf("v2 row missing: %+v", events)
+	}
+	if e.Model != "fledge-alpha-free" || e.Provider != "opencode" {
+		t.Errorf("model/provider = %q/%q, want the nested model resolved", e.Model, e.Provider)
+	}
+	if e.Project != "/proj/v2" {
+		t.Errorf("project = %q, want the session_v2 directory", e.Project)
+	}
+	if e.Input != 29097 || e.Output != 109 || e.Total != 29206 {
+		t.Errorf("buckets = %d/%d/%d", e.Input, e.Output, e.Total)
+	}
+	if e.CostUSD == nil || *e.CostUSD != 0 {
+		t.Errorf("cost = %v, want a reported zero preserved", e.CostUSD)
+	}
+	if e.LatencyMs == nil || *e.LatencyMs != 3000 {
+		t.Errorf("latency = %v, want created->completed", e.LatencyMs)
+	}
+	if sub := byKey["opencode|msg_v2_sub"]; sub.AgentType != "subagent" || sub.AgentName != "librarian" {
+		t.Errorf("subagent row = %q/%q", sub.AgentType, sub.AgentName)
+	}
+	if len(sessions) != 2 {
+		t.Errorf("sessions = %+v, want both session_v2 rows", sessions)
+	}
+	if len(states) != 1 {
+		t.Fatalf("states = %+v, want one v2 cursor", states)
+	}
+	for key, st := range states {
+		if key != sqlKey("opencode#v2", env.db) {
+			t.Errorf("cursor key = %q, want the v2 key so it cannot collide with the v1 cursor", key)
+		}
+		if st.Watermark != 5 {
+			t.Errorf("watermark = %d, want the last rowid", st.Watermark)
+		}
+	}
+
+	// Resuming from the v2 cursor must read nothing, the same as the v1 cursor does.
+	again, _, _, _ := scanFixture(t, env.adapter(), env.root, false, states)
+	if len(again) != 0 {
+		t.Errorf("second pass events = %+v, want none", again)
+	}
+}
+
+// A database mid-migration carries both stores and the same messages in each. Both are
+// read under the same event key, which the store's upsert collapses onto one row.
+func TestOpenCodeV1AndV2StoresCoexist(t *testing.T) {
+	ts := int64(1_791_296_880_305)
+	data := ocData("assistant", "kimi-k2.6", "kizunax", 10, 1, 0, 0, 0, nil, ts, 0)
+	env := opencodeV2Fixture(t,
+		[]ocSessionRow{{id: "ses_1", directory: "/p", created: ts, updated: ts}},
+		[]ocMessageRow{{id: "msg_same", sessionID: "ses_1", role: "assistant", timeCreated: ts, timeUpdated: ts, data: data}},
+		true)
+
+	events, _, _, states := scanFixture(t, env.adapter(), env.root, true, nil)
+	if len(events) != 2 {
+		t.Fatalf("events = %+v, want one row per store", events)
+	}
+	for _, e := range events {
+		if e.EventKey != "opencode|msg_same" {
+			t.Errorf("key = %q, want the shared key the store dedupes on", e.EventKey)
+		}
+	}
+	if len(states) != 2 {
+		t.Fatalf("states = %+v, want one cursor per store", states)
+	}
+	for _, want := range []string{sqlKey("opencode", env.db), sqlKey("opencode#v2", env.db)} {
+		if _, ok := states[want]; !ok {
+			t.Errorf("missing cursor %q in %+v", want, states)
+		}
 	}
 }
 
