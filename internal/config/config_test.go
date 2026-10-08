@@ -67,6 +67,34 @@ func TestLoadFallsBackOnUnknownTimezone(t *testing.T) {
 	}
 }
 
+// Deferring sleep during playback is on by default: input idle time cannot tell watching a
+// video apart from having walked away, so the opt-out has to be explicit.
+func TestWaitForMediaConfig(t *testing.T) {
+	t.Setenv("AGENTS_DASHBOARD_HOME", t.TempDir())
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !c.Snapshot().WaitForMedia {
+		t.Error("WaitForMedia should default to true")
+	}
+
+	t.Setenv("AGENTS_DASHBOARD_SLEEP_WAIT_FOR_MEDIA", "false")
+	c, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c.Snapshot().WaitForMedia {
+		t.Error("environment override was not applied")
+	}
+
+	// Persisted settings arrive through Apply, so the value must take effect there too.
+	c.Apply(Mutable{WaitForMedia: true})
+	if !c.Snapshot().WaitForMedia {
+		t.Error("Apply did not enable WaitForMedia")
+	}
+}
+
 func TestLoadRejectsOutOfRangePort(t *testing.T) {
 	t.Setenv("AGENTS_DASHBOARD_HOME", t.TempDir())
 	t.Setenv("AGENTS_DASHBOARD_SERVER_PORT", "70000")

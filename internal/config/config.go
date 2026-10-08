@@ -31,6 +31,9 @@ const (
 	DefaultSleepActiveWindow = 2 * time.Minute
 	DefaultPreventSystem     = true
 	DefaultPreventDisplay    = true
+	// DefaultWaitForMedia defers auto-sleep while audio or video is playing: input idle
+	// time cannot tell watching a video apart from having walked away.
+	DefaultWaitForMedia = true
 )
 
 // Mutable holds every field the user can change at runtime from the settings page.
@@ -56,6 +59,7 @@ type Mutable struct {
 	PreventSystemSleep    bool
 	PreventDisplaySleep   bool
 	PreventLidClosedSleep bool
+	WaitForMedia          bool
 }
 
 // Config is the process configuration.
@@ -115,6 +119,7 @@ func Load() (*Config, error) {
 		PreventSystemSleep:    envBool("AGENTS_DASHBOARD_PREVENT_SYSTEM_SLEEP", DefaultPreventSystem),
 		PreventDisplaySleep:   envBool("AGENTS_DASHBOARD_PREVENT_DISPLAY_SLEEP", DefaultPreventDisplay),
 		PreventLidClosedSleep: envBool("AGENTS_DASHBOARD_PREVENT_LID_SLEEP", false),
+		WaitForMedia:          envBool("AGENTS_DASHBOARD_SLEEP_WAIT_FOR_MEDIA", DefaultWaitForMedia),
 	}
 	if !ValidSleepMode(c.mutable.SleepMode) {
 		warnings = append(warnings, fmt.Sprintf("sleep mode %q is invalid; using off", c.mutable.SleepMode))
@@ -182,6 +187,7 @@ func (c *Config) Apply(m Mutable) {
 	c.mutable.PreventSystemSleep = m.PreventSystemSleep
 	c.mutable.PreventDisplaySleep = m.PreventDisplaySleep
 	c.mutable.PreventLidClosedSleep = m.PreventLidClosedSleep
+	c.mutable.WaitForMedia = m.WaitForMedia
 }
 
 // ValidSleepMode reports whether mode is one of the supported sleep prevention modes.

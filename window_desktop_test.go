@@ -10,6 +10,19 @@ import (
 	"github.com/vietlubu/agents-dashboard/internal/sleep"
 )
 
+// Deferring sleep for playback is its own status line: "waiting for the user" would be
+// wrong when the user is sitting in front of a video.
+func TestTrayMediaStatus(t *testing.T) {
+	for _, locale := range []string{"en", "vi"} {
+		labels := trayLabelsFor(locale)
+		tray := &tray{labels: labels}
+		st := sleep.Status{Mode: config.SleepModeAgent, Supported: true, Detail: "media", Media: true, MediaSource: "audio output"}
+		if got := tray.statusText(st, false); got != labels.stMedia {
+			t.Fatalf("%s media status = %q, want %q", locale, got, labels.stMedia)
+		}
+	}
+}
+
 func TestTrayLidStatusRequiresAcknowledgementAndReadback(t *testing.T) {
 	for _, locale := range []string{"en", "vi"} {
 		labels := trayLabelsFor(locale)

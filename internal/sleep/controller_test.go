@@ -99,6 +99,7 @@ func newTestConfig(after, activeWindow time.Duration) *config.Config {
 		PreventSystemSleep:    true,
 		PreventDisplaySleep:   true,
 		PreventLidClosedSleep: false,
+		WaitForMedia:          true,
 	})
 	return cfg
 }

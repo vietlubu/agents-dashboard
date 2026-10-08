@@ -48,6 +48,7 @@ func (s *SettingsService) Get() (store.Settings, error) {
 		PreventSystemSleep:    cfg.PreventSystemSleep,
 		PreventDisplaySleep:   cfg.PreventDisplaySleep,
 		PreventLidClosedSleep: cfg.PreventLidClosedSleep,
+		WaitForMedia:          cfg.WaitForMedia,
 	}
 	if !config.ValidSleepMode(out.SleepMode) {
 		out.SleepMode = config.SleepModeOff
@@ -137,6 +138,11 @@ func (s *SettingsService) Get() (store.Settings, error) {
 		return out, err
 	} else {
 		out.PreventLidClosedSleep = v
+	}
+	if v, err := db.SettingBool(ctx, store.SettingWaitForMedia, out.WaitForMedia); err != nil {
+		return out, err
+	} else {
+		out.WaitForMedia = v
 	}
 	return out, nil
 }
@@ -232,6 +238,9 @@ func (s *SettingsService) Update(patch store.SettingsPatch) (store.Settings, err
 	if err := setBool(store.SettingPreventLidClosedSleep, patch.PreventLidClosedSleep); err != nil {
 		return store.Settings{}, err
 	}
+	if err := setBool(store.SettingWaitForMedia, patch.WaitForMedia); err != nil {
+		return store.Settings{}, err
+	}
 	// A sleep delay shorter than 30s would fight the machine's own idle timers; the active
 	// window shorter than 15s would flicker between active and idle.
 	if err := setInt(store.SettingSleepAfterS, patch.SleepAfterS, 30); err != nil {
@@ -278,6 +287,7 @@ func (s *SettingsService) applyToConfig(settings store.Settings) {
 		PreventSystemSleep:    settings.PreventSystemSleep,
 		PreventDisplaySleep:   settings.PreventDisplaySleep,
 		PreventLidClosedSleep: settings.PreventLidClosedSleep,
+		WaitForMedia:          settings.WaitForMedia,
 	})
 }
 

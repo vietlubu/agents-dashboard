@@ -92,6 +92,7 @@ func main() {
 		DisplaySleeper: platform.DisplaySleeper,
 		Screensaver:    platform.Screensaver,
 		Idler:          platform.Idler,
+		Media:          platform.Media,
 		Supported:      platform.Supported,
 		LidSupported:   platform.LidSupported,
 		Log:            logger,

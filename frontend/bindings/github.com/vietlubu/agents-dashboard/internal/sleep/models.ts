@@ -42,8 +42,17 @@ export interface Status {
     "clamshell": boolean;
 
     /**
+     * Media reports that playback was detected and sleep deferred because of it;
+     * MediaSource names what is playing, joined like Agents so the struct stays
+     * comparable and a status change can be detected without reflection.
+     */
+    "media": boolean;
+    "mediaSource": string;
+
+    /**
      * Detail names the current phase: disabled, unsupported, always, active, grace,
-     * waiting-user, sleeping, blocked or idle. It is meant for a status line, not for logic.
+     * waiting-user, media, sleeping, blocked or idle. It is meant for a status line, not
+     * for logic.
      */
     "detail": string;
     "error": string;

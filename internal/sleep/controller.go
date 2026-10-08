@@ -25,6 +25,7 @@ type Deps struct {
 	DisplaySleeper DisplaySleeper
 	Screensaver    ScreensaverStarter
 	Idler          Idler
+	Media          MediaWatcher
 	Supported      bool
 	LidSupported   bool
 	Log            *slog.Logger
@@ -45,6 +46,7 @@ type Controller struct {
 	displaySleeper DisplaySleeper
 	screensaver    ScreensaverStarter
 	idler          Idler
+	media          MediaWatcher
 	supported      bool
 	lidSupported   bool
 	log            *slog.Logger
@@ -88,6 +90,7 @@ func New(d Deps) *Controller {
 		displaySleeper: d.DisplaySleeper,
 		screensaver:    d.Screensaver,
 		idler:          d.Idler,
+		media:          d.Media,
 		supported:      d.Supported,
 		lidSupported:   d.LidSupported,
 		log:            log,
@@ -371,6 +374,25 @@ func (c *Controller) tickOnce(ctx context.Context) {
 		st.Detail = "waiting-user"
 		c.publish(st)
 		return
+	}
+
+	// Input idle is not the same as being away: media playback produces no input at all,
+	// so the idle timer runs while the user is watching. Step back instead of cutting a
+	// video short, and restart the countdown so the machine sleeps a full delay after
+	// playback ends. The dashboard's own assertions are released, leaving the playing app
+	// and the operating system's power settings in charge of keeping the machine up.
+	if snap.WaitForMedia && c.media != nil {
+		if m, measured := c.media.MediaPlaying(); measured && m.Playing {
+			c.mu.Lock()
+			c.idleSince = time.Now()
+			c.mu.Unlock()
+			c.setHeld(InhibitSpec{})
+			st.Media = true
+			st.MediaSource = strings.Join(m.Sources, ", ")
+			st.Detail = "media"
+			c.publish(st)
+			return
+		}
 	}
 
 	if err := c.setHeld(InhibitSpec{}); err != nil {

@@ -24,7 +24,8 @@ func defaultDisplaySleeper() DisplaySleeper { return linuxDisplaySleeper{} }
 func defaultScreensaver() ScreensaverStarter {
 	return linuxScreensaver{}
 }
-func defaultIdler() Idler { return linuxIdler{} }
+func defaultIdler() Idler               { return linuxIdler{} }
+func defaultMediaWatcher() MediaWatcher { return linuxMediaWatcher{} }
 
 // --- keep-awake ---------------------------------------------------------------
 

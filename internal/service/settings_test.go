@@ -86,6 +86,7 @@ func TestSleepSettingsRoundTrip(t *testing.T) {
 				PreventSystemSleep:    boolPtr(false),
 				PreventDisplaySleep:   boolPtr(true),
 				PreventLidClosedSleep: boolPtr(true),
+				WaitForMedia:          boolPtr(true),
 				SleepAfterS:           600,
 				SleepActiveWindowS:    45,
 			})
@@ -94,6 +95,9 @@ func TestSleepSettingsRoundTrip(t *testing.T) {
 			}
 			if updated.SleepMode != mode || updated.PreventSystemSleep || !updated.PreventDisplaySleep || !updated.PreventLidClosedSleep {
 				t.Errorf("sleep settings = %+v, want %s, system off, display and lid on", updated, mode)
+			}
+			if !updated.WaitForMedia {
+				t.Errorf("WaitForMedia = false, want the persisted true: %+v", updated)
 			}
 			if updated.SleepAfterS != 600 || updated.SleepActiveWindowS != 45 {
 				t.Errorf("durations = %d/%d, want 600/45", updated.SleepAfterS, updated.SleepActiveWindowS)
@@ -105,6 +109,9 @@ func TestSleepSettingsRoundTrip(t *testing.T) {
 			if snap.PreventSystemSleep || !snap.PreventDisplaySleep || !snap.PreventLidClosedSleep {
 				t.Errorf("config targets = %+v, want system off, display and lid on", snap)
 			}
+			if !snap.WaitForMedia {
+				t.Errorf("config snapshot = %+v, want WaitForMedia from the persisted settings", snap)
+			}
 			got, err := svc.Get()
 			if err != nil {
 				t.Fatalf("get: %v", err)
@@ -115,6 +122,10 @@ func TestSleepSettingsRoundTrip(t *testing.T) {
 			stored, ok, err := svc.deps.DB.GetSetting(context.Background(), store.SettingSleepMode)
 			if err != nil || !ok || stored != mode {
 				t.Errorf("persisted mode = %q, %v, %v, want %q", stored, ok, err, mode)
+			}
+			persistedMedia, ok, err := svc.deps.DB.GetSetting(context.Background(), store.SettingWaitForMedia)
+			if err != nil || !ok || persistedMedia != "true" {
+				t.Errorf("persisted sleep_wait_for_media = %q, %v, %v, want true", persistedMedia, ok, err)
 			}
 			unchanged, err := svc.Update(store.SettingsPatch{})
 			if err != nil {
@@ -135,6 +146,9 @@ func TestSleepSettingsRoundTrip(t *testing.T) {
 			}
 			if updated.SleepAfterS != 600 || updated.SleepActiveWindowS != 45 {
 				t.Errorf("scope-only update changed durations: %+v", updated)
+			}
+			if !updated.WaitForMedia {
+				t.Errorf("scope-only update cleared WaitForMedia: %+v", updated)
 			}
 			snap = cfg.Snapshot()
 			if snap.SleepMode != mode || snap.PreventSystemSleep || snap.PreventDisplaySleep || snap.PreventLidClosedSleep {

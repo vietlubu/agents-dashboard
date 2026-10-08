@@ -23,6 +23,7 @@ const UNCHANGED: SettingsPatch = {
   preventSystemSleep: null,
   preventDisplaySleep: null,
   preventLidClosedSleep: null,
+  sleepWaitForMedia: null,
   sleepAfterSeconds: 0,
   sleepActiveWindowSeconds: 0,
 };

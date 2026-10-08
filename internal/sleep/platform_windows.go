@@ -22,11 +22,13 @@ func defaultDisplaySleeper() DisplaySleeper { return windowsDisplaySleeper{} }
 func defaultScreensaver() ScreensaverStarter {
 	return windowsScreensaver{}
 }
-func defaultIdler() Idler { return windowsIdler{} }
+func defaultIdler() Idler               { return windowsIdler{} }
+func defaultMediaWatcher() MediaWatcher { return windowsMediaWatcher{} }
 
 var (
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
 	user32   = syscall.NewLazyDLL("user32.dll")
+	shell32  = syscall.NewLazyDLL("shell32.dll")
 	powrprof = syscall.NewLazyDLL("powrprof.dll")
 
 	procSetThreadExecutionState = kernel32.NewProc("SetThreadExecutionState")
@@ -34,6 +36,10 @@ var (
 	procGetLastInputInfo        = user32.NewProc("GetLastInputInfo")
 	procSendMessageW            = user32.NewProc("SendMessageW")
 	procSetSuspendState         = powrprof.NewProc("SetSuspendState")
+
+	// Shell state, used to spot full-screen playback without the administrator rights
+	// `powercfg /requests` would need.
+	procSHQueryUserNotificationState = shell32.NewProc("SHQueryUserNotificationState")
 )
 
 const (

@@ -8,6 +8,7 @@ type Platform struct {
 	DisplaySleeper DisplaySleeper
 	Screensaver    ScreensaverStarter
 	Idler          Idler
+	Media          MediaWatcher
 	Processes      ProcessLister
 	Supported      bool
 	LidSupported   bool
@@ -21,6 +22,7 @@ func DefaultPlatform() Platform {
 		DisplaySleeper: defaultDisplaySleeper(),
 		Screensaver:    defaultScreensaver(),
 		Idler:          defaultIdler(),
+		Media:          defaultMediaWatcher(),
 		Processes:      DefaultProcessLister(),
 		Supported:      PlatformSupported(),
 		LidSupported:   platformLidSupported(),

@@ -3,6 +3,13 @@
 //
 // Agent activity requires both a running process and a recently written session file or
 // database, so an editor left open on an idle session does not hold the machine awake.
+//
+// Stepping away is judged by input idle time, which playback defeats: a video produces no
+// keyboard or mouse events. Media playback is therefore a second signal, and while it is
+// detected the controller steps back instead of forcing sleep — it drops its own
+// assertions and restarts the countdown, so the machine sleeps a full delay after playback
+// ends. Unlike Idler, an unmeasurable MediaWatcher means "no media", because refusing to
+// sleep on a platform that cannot see playback would defeat the feature entirely.
 package sleep
 
 import (
@@ -84,6 +91,22 @@ type Idler interface {
 	Idle() (time.Duration, bool)
 }
 
+// Media is one observation of media playback. Sources names what was playing, for the
+// status line only; it is never used to make a decision.
+type Media struct {
+	Playing bool
+	Sources []string
+}
+
+// MediaWatcher reports whether audio or video is playing, which means the user is still
+// using the machine even though no keyboard or mouse input is arriving. A false ok means
+// the platform cannot tell, and the controller then treats the machine as unused: only a
+// positive observation defers sleep, so an unmeasurable platform keeps the previous
+// behaviour instead of never sleeping again.
+type MediaWatcher interface {
+	MediaPlaying() (Media, bool)
+}
+
 // ProcessLister lists the command names of the running processes it can see. It is only
 // used to tell whether a coding agent is still running.
 type ProcessLister interface {
@@ -121,8 +144,14 @@ type Status struct {
 	SleepAtMs      int64    `json:"sleepAtMs"`
 	Held           HeldSpec `json:"held"`
 	Clamshell      bool     `json:"clamshell"`
+	// Media reports that playback was detected and sleep deferred because of it;
+	// MediaSource names what is playing, joined like Agents so the struct stays
+	// comparable and a status change can be detected without reflection.
+	Media       bool   `json:"media"`
+	MediaSource string `json:"mediaSource"`
 	// Detail names the current phase: disabled, unsupported, always, active, grace,
-	// waiting-user, sleeping, blocked or idle. It is meant for a status line, not for logic.
+	// waiting-user, media, sleeping, blocked or idle. It is meant for a status line, not
+	// for logic.
 	Detail string `json:"detail"`
 	Error  string `json:"error"`
 }

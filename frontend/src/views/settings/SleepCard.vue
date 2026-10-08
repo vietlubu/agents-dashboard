@@ -29,6 +29,7 @@ const modeOptions = computed(() => [
 const system = ref(true);
 const display = ref(true);
 const lid = ref(false);
+const waitForMedia = ref(true);
 const after = ref(300);
 const activeWindow = ref(120);
 
@@ -44,6 +45,7 @@ watch(
     system.value = value.preventSystemSleep;
     display.value = value.preventDisplaySleep;
     lid.value = value.preventLidClosedSleep;
+    waitForMedia.value = value.sleepWaitForMedia;
     after.value = Number(value.sleepAfterSeconds);
     activeWindow.value = Number(value.sleepActiveWindowSeconds);
   },
@@ -67,6 +69,8 @@ const statusKey = computed(() => {
       return sleep.keepingAwake ? "settings.statusActive" : "settings.sleepNoTargets";
     case "grace":
       return "settings.statusGrace";
+    case "media":
+      return "settings.statusMedia";
     case "waiting-user":
       return "settings.statusWaitingUser";
     case "sleeping":
@@ -91,6 +95,7 @@ async function save() {
     preventSystemSleep: system.value,
     preventDisplaySleep: display.value,
     preventLidClosedSleep: lid.value,
+    sleepWaitForMedia: waitForMedia.value,
     ...(mode.value === "agent" ? {
       sleepAfterSeconds: after.value,
       sleepActiveWindowSeconds: activeWindow.value,
@@ -150,7 +155,10 @@ async function restore() {
       <Toggle v-model="system" :label="$t('settings.preventSystemSleep')" />
       <Toggle v-model="display" :label="$t('settings.preventDisplaySleep')" />
       <Toggle v-if="sleep.status?.lidSupported" v-model="lid" :label="$t('settings.preventLidClosedSleep')" />
+      <Toggle v-if="mode === 'agent'" v-model="waitForMedia" :label="$t('settings.sleepWaitForMedia')" />
     </fieldset>
+
+    <p v-if="mode === 'agent' && waitForMedia" class="faint">{{ $t('settings.sleepMediaHint') }}</p>
 
     <p v-if="mode !== 'off' && !system && !display && !(sleep.status?.lidSupported && lid)" class="note">{{ $t('settings.sleepNoTargets') }}</p>
 

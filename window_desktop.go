@@ -64,7 +64,7 @@ type trayLabels struct {
 	confirmSleep, confirmCancel                 string
 
 	stUnsupported, stDisabled, stActive                     string
-	stGrace, stWaitingUser, stSleeping                      string
+	stGrace, stWaitingUser, stMedia, stSleeping             string
 	stIdle, stAlways, stError, noTargets                    string
 	lidUnsupported, legacySleepDisabled                     string
 	lidPrivate, lidRequested, lidNotRequested               string
@@ -105,6 +105,7 @@ func trayLabelsFor(locale string) trayLabels {
 			stActive:            "Đang giữ máy thức",
 			stGrace:             "Đang đếm ngược tới lúc ngủ",
 			stWaitingUser:       "Chờ người dùng rời máy",
+			stMedia:             "Đang phát media — tạm hoãn sleep",
 			stSleeping:          "Đang ngủ",
 			stIdle:              "Rảnh",
 			stAlways:            "Đang chặn sleep liên tục",
@@ -155,6 +156,7 @@ func trayLabelsFor(locale string) trayLabels {
 		stActive:            "Holding the machine awake",
 		stGrace:             "Countdown to sleep",
 		stWaitingUser:       "Waiting for the user to step away",
+		stMedia:             "Media is playing — sleep deferred",
 		stSleeping:          "Sleeping",
 		stIdle:              "Idle",
 		stAlways:            "Preventing sleep continuously",
@@ -574,6 +576,8 @@ func (t *tray) statusText(st sleep.Status, lidSelected bool) string {
 			return l.stGrace + " " + time.UnixMilli(st.SleepAtMs).Format("15:04")
 		}
 		return l.stGrace
+	case "media":
+		return l.stMedia
 	case "waiting-user":
 		return l.stWaitingUser
 	case "sleeping":

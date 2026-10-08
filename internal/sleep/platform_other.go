@@ -16,6 +16,9 @@ func defaultScreensaver() ScreensaverStarter {
 	return noopScreensaver{}
 }
 func defaultIdler() Idler { return noopIdler{} }
+func defaultMediaWatcher() MediaWatcher {
+	return noopMediaWatcher{}
+}
 
 type noopInhibitor struct{}
 
@@ -37,3 +40,8 @@ func (noopScreensaver) StartScreensaver() error { return errUnsupported }
 type noopIdler struct{}
 
 func (noopIdler) Idle() (time.Duration, bool) { return 0, false }
+
+// noopMediaWatcher reports media as unmeasurable, which the controller reads as "no media".
+type noopMediaWatcher struct{}
+
+func (noopMediaWatcher) MediaPlaying() (Media, bool) { return Media{}, false }

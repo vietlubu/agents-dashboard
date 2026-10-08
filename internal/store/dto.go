@@ -380,6 +380,7 @@ type Settings struct {
 	PreventSystemSleep    bool   `json:"preventSystemSleep"`
 	PreventDisplaySleep   bool   `json:"preventDisplaySleep"`
 	PreventLidClosedSleep bool   `json:"preventLidClosedSleep"`
+	WaitForMedia          bool   `json:"sleepWaitForMedia"`
 }
 
 // SettingsPatch is a partial settings update; empty/zero fields are ignored.
@@ -399,6 +400,7 @@ type SettingsPatch struct {
 	PreventSystemSleep    *bool  `json:"preventSystemSleep"`
 	PreventDisplaySleep   *bool  `json:"preventDisplaySleep"`
 	PreventLidClosedSleep *bool  `json:"preventLidClosedSleep"`
+	WaitForMedia          *bool  `json:"sleepWaitForMedia"`
 	SleepAfterS           int64  `json:"sleepAfterSeconds"`
 	SleepActiveWindowS    int64  `json:"sleepActiveWindowSeconds"`
 }

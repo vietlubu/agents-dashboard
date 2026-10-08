@@ -29,6 +29,8 @@ const (
 	SettingPreventSystemSleep    = "prevent_system_sleep"
 	SettingPreventDisplaySleep   = "prevent_display_sleep"
 	SettingPreventLidClosedSleep = "prevent_lid_closed_sleep"
+	// SettingWaitForMedia defers auto-sleep while audio or video is playing.
+	SettingWaitForMedia = "sleep_wait_for_media"
 )
 
 // GetSetting reads one setting.

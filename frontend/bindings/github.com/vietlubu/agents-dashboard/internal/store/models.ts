@@ -384,6 +384,7 @@ export interface Settings {
     "preventSystemSleep": boolean;
     "preventDisplaySleep": boolean;
     "preventLidClosedSleep": boolean;
+    "sleepWaitForMedia": boolean;
 }
 
 /**
@@ -407,6 +408,7 @@ export interface SettingsPatch {
     "preventSystemSleep": boolean | null;
     "preventDisplaySleep": boolean | null;
     "preventLidClosedSleep": boolean | null;
+    "sleepWaitForMedia": boolean | null;
     "sleepAfterSeconds": number;
     "sleepActiveWindowSeconds": number;
 }
