@@ -18,6 +18,7 @@ var agentProcessNames = map[string]struct{}{
 	"pi":       {},
 	"omp":      {},
 	"freebuff": {},
+	"dsh":      {},
 }
 
 // matchedAgents finds the agent names inside a process list. Each entry may be a bare image

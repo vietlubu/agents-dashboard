@@ -29,6 +29,7 @@ func AllWithHome(home string) []Adapter {
 		newOmpAdapter(home),
 		newFreebuffAdapter(home),
 		newFreebuffDesktopAdapter(home),
+		newDshAdapter(home),
 	}
 }
 

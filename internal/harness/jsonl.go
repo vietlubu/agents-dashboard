@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -180,6 +181,69 @@ func (fs *FileScanner) Scan(ctx context.Context, path string, offset int64, mark
 	fs.OversizedLines += res.OversizedLines
 	fs.pending = pending
 	return res, nil
+}
+
+// ReadLines streams newline-delimited records from an arbitrary reader, calling fn for
+// every line that matches a marker and is short enough to be a usage record. It exists
+// for adapters whose source is not a plain file on disk — the DSH adapter wraps a
+// Zstandard decoder in it — and it enforces the same two guarantees as FileScanner:
+// records longer than DefaultMaxLineBytes are dropped rather than buffered without limit,
+// and marker filtering happens before the line is offered to the callback.
+//
+// It returns the number of lines offered to fn. A read error from r (including the decode
+// error a torn trailing Zstandard frame produces) is returned so the caller can decide
+// whether to re-read from the start.
+func ReadLines(r io.Reader, markers [][]byte, fn func([]byte)) (int, error) {
+	br := bufio.NewReaderSize(r, chunkSize)
+	var pending []byte
+	oversized := false
+	lines := 0
+
+	emit := func() {
+		line := bytes.TrimRight(pending, "\r\n")
+		pending = pending[:0]
+		if len(line) == 0 || int64(len(line)) > DefaultMaxLineBytes {
+			return
+		}
+		if hasMarker(line, markers) {
+			fn(line)
+			lines++
+		}
+	}
+
+	for {
+		chunk, err := br.ReadSlice('\n')
+		switch {
+		case oversized:
+			// Discard the tail of an over-long line until its terminating newline.
+			if err == nil {
+				oversized = false
+			}
+		case err == nil:
+			pending = append(pending, chunk...)
+			emit()
+		default:
+			pending = append(pending, chunk...)
+			if int64(len(pending)) > DefaultMaxLineBytes {
+				pending = pending[:0]
+				oversized = true
+			}
+		}
+		switch {
+		case err == nil:
+			continue
+		case errors.Is(err, bufio.ErrBufferFull):
+			continue
+		case errors.Is(err, io.EOF):
+			// A trailing line without a newline is still a complete record.
+			if !oversized {
+				emit()
+			}
+			return lines, nil
+		default:
+			return lines, err
+		}
+	}
 }
 
 // emitLine hands one complete line to the callback unless it is too long to be a usage

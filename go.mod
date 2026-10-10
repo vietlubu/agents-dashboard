@@ -3,6 +3,7 @@ module github.com/vietlubu/agents-dashboard
 go 1.26.0
 
 require (
+	github.com/klauspost/compress v1.18.3
 	github.com/wailsapp/wails/v3 v3.0.0-beta.18
 	modernc.org/sqlite v1.60.1
 )
